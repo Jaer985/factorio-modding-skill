@@ -42,7 +42,7 @@ git clone https://github.com/Jaer985/factorio-modding-skill.git ~/.config/openco
 2. Copy the contents of `SKILL.md` (and relevant `references/` files) into your project's `.cursorrules` or Windsurf rules file.
 3. Or reference the skill path in your agent configuration.
 
-### Option 5: Claude Code
+### Option 4: Claude Code
 
 Include as a reference in your `CLAUDE.md` or `instructions.md`:
 
@@ -52,15 +52,15 @@ Reference the factorio-modding skill at /path/to/factorio-modding/SKILL.md
 Activate when working with .lua, info.json, or Factorio mod files.
 ```
 
-### Option 6: GitHub Copilot
+### Option 5: GitHub Copilot
 
 Copy relevant patterns from `references/01-patterns.md` into your `.github/copilot-instructions.md` or reference the repository in your agent instructions.
 
-### Option 7: Any LLM (Manual Prompt)
+### Option 6: Any LLM (Manual Prompt)
 
 Copy the contents of `SKILL.md` directly into your system prompt or conversation context when working on Factorio mods. You can also include specific `references/*.md` files as needed.
 
-### Option 8: Per-Project Install (Git Submodule)
+### Option 7: Per-Project Install (Git Submodule)
 
 ```bash
 git submodule add https://github.com/Jaer985/factorio-modding-skill.git .ai/skills/factorio-modding
