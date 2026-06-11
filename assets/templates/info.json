@@ -1,0 +1,18 @@
+{
+  "name": "my-mod-name",
+  "version": "1.0.0",
+  "title": "My Mod Title",
+  "author": "Your Name",
+  "contact": "email@example.com",
+  "homepage": "https://example.com",
+  "description": "Description of what this mod does.",
+  "factorio_version": "2.0",
+  "dependencies": [
+    "base >= 2.0",
+    "? space-age >= 2.0"
+  ],
+  "quality_required": false,
+  "space_platform_required": false,
+  "elevated_rails_required": false,
+  "license": "MIT"
+}
