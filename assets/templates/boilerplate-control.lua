@@ -3,6 +3,13 @@
 -- Factorio 2.0 / Space Age compatible
 
 -- ============================================
+-- Module-scope caching (Locality of Reference)
+-- ============================================
+local pairs = pairs
+local get_entity = game.get_entity_by_unit_number
+local get_player = game.get_player
+
+-- ============================================
 -- Debug Toggle (set false before release)
 -- ============================================
 local DEBUG = false
@@ -65,19 +72,35 @@ script.on_event(defines.events.on_player_mined_entity, function(event)
   end
 end, {{filter = "name", name = "my-mod-entity"}})
 
--- Timed processing (throttled)
+-- Timed processing (stateful batch iterator)
+-- Uses next() to persist hash pointer across ticks.
+-- Resolves unit_number → LuaEntity via game.get_entity_by_unit_number()
+-- and garbage-collects orphaned entries when entities are invalidated.
 script.on_event(defines.events.on_tick, function(event)
-  -- Run every 60 ticks (1 second)
-  if event.tick % 60 ~= 0 then return end
-
-  -- Process entities in batches
   local batch_size = 50
-  local total = 0
-  for unit_number, data in pairs(storage.my_entities) do
-    if total >= batch_size then break end
-    -- Process entity data
-    total = total + 1
+  storage.iterator_keys = storage.iterator_keys or {}
+  local current_key = storage.iterator_keys.my_entities
+
+  for _ = 1, batch_size do
+    local key, entity_data = next(storage.my_entities, current_key)
+    if not key then
+      -- Wrapped around the full table — reset and stop
+      storage.iterator_keys.my_entities = nil
+      return
+    end
+
+    current_key = key
+    local entity = get_entity(key)
+    if entity and entity.valid then
+      -- Process entity safely
+      -- entity_data contains { unit_number, surface, position, created_tick }
+    else
+      -- Entity destroyed externally — garbage collect the orphaned entry
+      storage.my_entities[key] = nil
+    end
   end
+
+  storage.iterator_keys.my_entities = current_key
 end)
 
 -- ============================================

@@ -243,18 +243,29 @@ if data.raw["recipe"]["iron-plate"] then
 end
 
 -- Safely modify a pipe/fluidbox on a machine
+-- NOTE: Factorio 2.0 split fluid_boxes into input_fluid_box / output_fluid_box
+-- for some prototypes. Always check the new schema first, then fall back.
 if data.raw["assembling-machine"]["assembling-machine-1"] then
   local machine = data.raw["assembling-machine"]["assembling-machine-1"]
-  if machine.fluid_boxes then
-    table.insert(machine.fluid_boxes, {
-      production_type = "input",
-      pipe_picture = assembler3pipepictures(),
-      pipe_covers = pipecoverspictures(),
-      base_area = 10,
-      base_level = -1,
-      pipe_connections = {{type = "input", position = {0, -2}}},
-      secondary_draw_orders = { north = 4 }
-    })
+
+  local new_fluid_box = {
+    production_type = "input",
+    pipe_picture = assembler3pipepictures(),
+    pipe_covers = pipecoverspictures(),
+    volume = 1000,       -- 2.0: replaces base_area
+    pipe_connections = {{flow_direction = "input", direction = defines.direction.north, position = {0, -1}}}
+  }
+
+  if machine.input_fluid_box then
+    -- Factorio 2.0 native schema: single input_fluid_box (not an array)
+    -- To add a second input, you must convert to fluid_boxes array format
+    -- or modify the existing input_fluid_box properties.
+    -- Example: update pipe connections on existing input
+    machine.input_fluid_box.pipe_connections[#machine.input_fluid_box.pipe_connections + 1] =
+      new_fluid_box.pipe_connections[1]
+  elseif type(machine.fluid_boxes) == "table" then
+    -- Legacy schema fallback: fluid_boxes is an indexable array
+    table.insert(machine.fluid_boxes, new_fluid_box)
   end
 end
 ```

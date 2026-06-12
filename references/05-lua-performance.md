@@ -61,13 +61,27 @@ script.on_event(defines.events.on_tick, function(event)
   end
 end)
 
--- ✅ BETTER: Staggered processing (spread across multiple ticks)
+-- ✅ BETTER: Staggered processing with stateful iterator
+-- NOTE: storage.my_entities is keyed by unit_number (non-sequential).
+-- The # operator returns 0 for hash maps, so index-based loops fail silently.
+-- Use next() to persist the hash pointer across ticks.
 script.on_event(defines.events.on_tick, function(event)
   local batch_size = 50
-  local start_index = ((event.tick / 60) % math.ceil(#storage.my_entities / batch_size)) * batch_size + 1
-  for i = start_index, math.min(start_index + batch_size - 1, #storage.my_entities) do
-    -- process one entity
+  storage.iterator_keys = storage.iterator_keys or {}
+  local current_key = storage.iterator_keys.my_entities
+
+  for _ = 1, batch_size do
+    local key, entity_data = next(storage.my_entities, current_key)
+    if not key then
+      -- Wrapped around — reset pointer and stop this tick
+      storage.iterator_keys.my_entities = nil
+      return
+    end
+    current_key = key
+    -- process entity_data
   end
+
+  storage.iterator_keys.my_entities = current_key
 end)
 ```
 
@@ -142,10 +156,13 @@ storage.tracked_entities = {entity} -- entity reference
 -- ✅ GOOD: Store unit_number, look up when needed
 storage.tracked_entities = {[entity.unit_number] = true}
 
--- Lookup
-local function get_tracked_entity(unit_number, surface)
-  if not (surface and surface.valid) then return nil end
-  return surface.find_entity("my-entity", unit_number)
+-- Lookup via deterministic unit_number resolution (2.0+)
+-- NOTE: surface.find_entity() takes (name, position), NOT unit_number.
+-- Use game.get_entity_by_unit_number() for O(1) lookup by unit_number.
+local function get_tracked_entity(unit_number)
+  local entity = game.get_entity_by_unit_number(unit_number)
+  if entity and entity.valid then return entity end
+  return nil
 end
 ```
 
@@ -191,6 +208,26 @@ local chunk_entities = surface.get_entities({area = chunk_area})
 ---
 
 ## Locality of Reference
+
+### Module-Scope Caching
+
+Cache Lua standard library methods and frequently-called Factorio APIs at the **module scope** (top of file). This eliminates hash table lookups (`math.`, `table.`, `game.`) on every call inside the event loop at 60 UPS.
+
+```lua
+-- At the top of control.lua — module scope
+local math_min = math.min
+local math_ceil = math.ceil
+local table_insert = table.insert
+local pairs = pairs
+
+-- Factorio API shortcuts (available after on_init/on_load)
+local get_entity = game.get_entity_by_unit_number
+local get_player = game.get_player
+```
+
+### Event-Scope Caching
+
+Cache per-tick references inside the handler closure:
 
 ```lua
 -- ❌ BAD: Repeated global lookups
