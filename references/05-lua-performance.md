@@ -66,22 +66,24 @@ end)
 -- The # operator returns 0 for hash maps, so index-based loops fail silently.
 -- Use next() to persist the hash pointer across ticks.
 script.on_event(defines.events.on_tick, function(event)
+  local mod_storage = storage["my-mod-name"]
+  if not mod_storage then return end
+
   local batch_size = 50
-  storage.iterator_keys = storage.iterator_keys or {}
-  local current_key = storage.iterator_keys.my_entities
+  local current_key = mod_storage.iterator_keys.my_entities
 
   for _ = 1, batch_size do
-    local key, entity_data = next(storage.my_entities, current_key)
+    local key, entity_data = next(mod_storage.my_entities, current_key)
     if not key then
       -- Wrapped around — reset pointer and stop this tick
-      storage.iterator_keys.my_entities = nil
+      mod_storage.iterator_keys.my_entities = nil
       return
     end
     current_key = key
     -- process entity_data
   end
 
-  storage.iterator_keys.my_entities = current_key
+  mod_storage.iterator_keys.my_entities = current_key
 end)
 ```
 
@@ -114,34 +116,44 @@ script.on_event(defines.events.on_tick, function(event)
   end
 end)
 
--- ✅ GOOD: Track entities in storage and update incrementally
+-- ✅ GOOD: Track entities in namespace-isolated storage and update incrementally
 script.on_init(function()
-  storage.my_entities = {}
+  storage["my-mod-name"] = {
+    my_entities = {}
+  }
 end)
 
 script.on_event(defines.events.on_built_entity, function(event)
   local entity = event.entity
   if not (entity and entity.valid) then return end
+
+  local mod_storage = storage["my-mod-name"]
+  if not mod_storage then return end
+
   if entity.name == "my-entity" then
-    storage.my_entities[entity.unit_number] = entity
+    mod_storage.my_entities[entity.unit_number] = entity
   end
 end, {{filter = "name", name = "my-entity"}})
 
 script.on_event(defines.events.on_player_mined_entity, function(event)
   local entity = event.entity
-  if entity and storage.my_entities[entity.unit_number] then
-    storage.my_entities[entity.unit_number] = nil
+  local mod_storage = storage["my-mod-name"]
+  if mod_storage and entity and mod_storage.my_entities[entity.unit_number] then
+    mod_storage.my_entities[entity.unit_number] = nil
   end
 end, {{filter = "name", name = "my-entity"}})
 
 -- Process only tracked entities
 script.on_event(defines.events.on_tick, function(event)
   if event.tick % 60 ~= 0 then return end
-  for unit_number, entity in pairs(storage.my_entities) do
+  local mod_storage = storage["my-mod-name"]
+  if not mod_storage then return end
+
+  for unit_number, entity in pairs(mod_storage.my_entities) do
     if entity.valid then
       -- process
     else
-      storage.my_entities[unit_number] = nil -- cleanup invalid
+      mod_storage.my_entities[unit_number] = nil -- cleanup invalid
     end
   end
 end)

@@ -114,7 +114,7 @@ end)
 script.on_event(defines.events.on_built_entity, function(event)
   -- event.entity, event.player_index, event.surface_index
   -- event.tick, event.created_by_migration
-end, {filter = {name = "my-entity"}})
+end, {{filter = "name", name = "my-entity"}})
 ```
 
 ---

@@ -116,21 +116,51 @@ end
 
 ### Pattern 2: Event-Based Interop
 
-Instead of direct remote calls, use events for loose coupling:
+Custom events created dynamically via `script.generate_event_name()` return a unique numeric ID (integer) rather than injecting into `defines.events` (which is a static, C++ controlled read-only enum). 
+
+To coordinate events between mods, Mod A must register the event and expose its ID via a public remote interface:
 
 ```lua
--- Mod A fires a custom event
-script.raise_event(defines.events.on_custom_event_name, {
+-- Mod A (Creator & Dispatcher)
+storage.my_custom_event_id = script.generate_event_name()
+
+remote.add_interface("my_mod_api", {
+  get_event_id = function()
+    return storage.my_custom_event_id
+  end
+})
+
+-- When firing the event:
+script.raise_event(storage.my_custom_event_id, {
   mod_name = "my-mod",
   data = some_data
 })
 
--- Mod B listens (if present)
-script.on_event(defines.events.on_custom_event_name, function(event)
-  if event.mod_name == "my-mod" then
-    -- react to my-mod's event
+-- Mod B (Listener)
+-- Retrieve the event ID dynamically at runtime
+script.on_init(function()
+  -- Try to subscribe if Mod A is already loaded
+  subscribe_to_event()
+end)
+
+script.on_load(function()
+  -- Re-register event handler if we have the ID saved in storage
+  if storage.subscribed_event_id then
+    script.on_event(storage.subscribed_event_id, handle_my_mod_event)
   end
-})
+end)
+
+function subscribe_to_event()
+  if remote.interfaces["my_mod_api"] then
+    local event_id = remote.call("my_mod_api", "get_event_id")
+    storage.subscribed_event_id = event_id
+    script.on_event(event_id, handle_my_mod_event)
+  end
+end
+
+function handle_my_mod_event(event)
+  -- handle event
+end
 ```
 
 ### Pattern 3: Signal-Based Communication

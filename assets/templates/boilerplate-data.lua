@@ -21,7 +21,7 @@ local items = {
     name = "my-mod-item",
     localised_name = {"item-name.my-mod-item"},
     localised_description = {"item-description.my-mod-item"},
-    icons = icon("my-mod-item", 64),
+    icons = {icon("my-mod-item", 64)},
     stack_size = 100,
     subgroup = "my-mod-items",
     order = "a"
@@ -36,7 +36,7 @@ local recipes = {
     type = "recipe",
     name = "my-mod-item",
     localised_name = {"recipe-name.my-mod-item"},
-    icons = icon("my-mod-item", 64),
+    icons = {icon("my-mod-item", 64)},
     energy_required = 5,
     ingredients = {
       {type = "item", name = "iron-plate", amount = 10}
@@ -58,7 +58,7 @@ local technologies = {
     type = "technology",
     name = "my-mod-tech",
     localised_name = {"technology-name.my-mod-tech"},
-    icons = icon("my-mod-tech", 256),
+    icons = {icon("my-mod-tech", 256)},
     effects = {
       {type = "unlock-recipe", recipe = "my-mod-item"}
     },
@@ -66,7 +66,7 @@ local technologies = {
     unit = {
       count = 50,
       ingredients = {
-        {"automation-science-pack", 1}
+        {type = "item", name = "automation-science-pack", amount = 1}
       },
       time = 30
     },
