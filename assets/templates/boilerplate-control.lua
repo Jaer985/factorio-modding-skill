@@ -3,12 +3,16 @@
 -- Factorio 2.0 / Space Age compatible
 
 -- ============================================
--- Module-scope caching (Locality of Reference)
+-- Module-scope caching & Imports
 -- ============================================
 local pairs = pairs
 local get_entity = game.get_entity_by_unit_number
 local get_player = game.get_player
 local table_deepcopy = require("util").table.deepcopy
+
+-- Import Modular Components
+local dispatcher = require("boilerplate-dispatcher")
+local migration = require("boilerplate-migration")
 
 -- ============================================
 -- Debug Toggle (set false before release)
@@ -44,8 +48,9 @@ script.on_load(function()
   debug_log("Mod loaded")
 end)
 
+-- Semantic Migration Pipeline Hook
 script.on_configuration_changed(function(data)
-  -- Handle mod version migrations
+  migration.run(data)
   debug_log("Configuration changed")
 
   -- Mid-game initialization scan (if mod is added to an existing save)
@@ -73,7 +78,7 @@ script.on_configuration_changed(function(data)
 end)
 
 -- ============================================
--- Event Handlers
+-- Event Handlers Registration (via Dispatcher)
 -- ============================================
 
 -- Track placed/created entities (covers players, robots, and scripts)
@@ -102,7 +107,7 @@ local function handle_entity_creation(event)
 end
 
 for _, event_id in ipairs(built_events) do
-  script.on_event(event_id, handle_entity_creation, {{filter = "name", name = "my-mod-entity"}})
+  dispatcher.register(event_id, "entity_creation", handle_entity_creation, {{filter = "name", name = "my-mod-entity"}})
 end
 
 -- Clean up removed/destroyed entities (covers mined, robot mined, died, and scripts)
@@ -125,14 +130,11 @@ local function handle_entity_removal(event)
 end
 
 for _, event_id in ipairs(destruction_events) do
-  script.on_event(event_id, handle_entity_removal, {{filter = "name", name = "my-mod-entity"}})
+  dispatcher.register(event_id, "entity_removal", handle_entity_removal, {{filter = "name", name = "my-mod-entity"}})
 end
 
--- Timed processing (stateful batch iterator)
--- Uses next() to persist hash pointer across ticks.
--- Resolves unit_number → LuaEntity via game.get_entity_by_unit_number()
--- and garbage-collects orphaned entries when entities are invalidated.
-script.on_event(defines.events.on_tick, function(event)
+-- Timed processing (registered dynamically in dispatcher)
+dispatcher.register(defines.events.on_tick, "batch_processing", function(event)
   local mod_storage = storage["my-mod-name"]
   if not mod_storage then return end
 
@@ -155,7 +157,7 @@ script.on_event(defines.events.on_tick, function(event)
     local entity = get_entity(key)
     if entity and entity.valid then
       -- Process entity safely
-      -- entity_data contains { unit_number, surface, position, created_tick }
+      -- entity_data contains { unit_number, surface_index, position, created_tick }
       current_key = key
     else
       -- Entity destroyed externally — garbage collect the orphaned entry

@@ -6,13 +6,14 @@ Drop these files into any AI coding assistant that supports custom instructions 
 
 ## Features
 
-- **Zero-Assumption Development** — the AI never assumes API signatures, prototype fields, or event parameters. Every method, event, and prototype is verified against official Factorio docs before use.
-- **2.0 / Space Age Ready** — full coverage of the 2.0 C++ engine changes, new API signatures, quality system, space platforms, elevated rails, and more.
-- **Compatibility-First** — namespace conventions, safe inter-mod patterns, dependency management, and conflict detection to prevent mod collisions.
-- **Structured Troubleshooting** — categorised error reference (data stage, control stage, desyncs, GUI, migrations) with debugging flowcharts and log analysis patterns.
-- **UPS Optimization** — event filtering, tick throttling, entity tracking patterns, and C++ vs Lua performance tradeoffs.
-- **Web Research Protocol** — when the AI encounters something unknown, it follows a structured research workflow through official docs, forums, community resources, and web search.
-- **Boilerplate Templates** — ready-to-use templates for `control.lua`, `data.lua`, `settings.lua`, and `info.json`.
+- **Zero-Assumption Dynamic RAG** — The static `references/` files are deprecated. The AI uses a dynamic vectorization pipeline that indexes the official Factorio 2.0 specs (Runtime API, Data Lifecycle, Prototypes) using structured embeddings to optimize context windows and ensure determinism.
+- **verify_prototype_definition(type, name) tool** — Integrated native Function Calling in OpenCode to contrast mod schemas in `data.lua` against the official JSON specification in real time.
+- **Automated Log Watcher** — Asynchronous file watcher on `factorio-current.log` that automatically intercepts stack traces on engine crashes or Lua runtime errors to formulate technical hypotheses before patching.
+- **Strict Pre-Execution Linting** — Integrates `luacheck` configured with the `std+factorio` environment as a blocking step in the internal CI loop to reject undeclared globals or invalid typing.
+- **2.0 / Space Age Ready** — Full coverage of the 2.0 C++ engine changes, new API signatures, quality system, space platforms, elevated rails, and more.
+- **Compatibility-First** — Namespace conventions, safe inter-mod patterns, dependency management, and conflict detection to prevent mod collisions.
+- **UPS Optimization** — Event filtering, tick throttling, entity tracking patterns, and C++ vs Lua performance tradeoffs.
+- **Modular Scaffolding Templates** — Ready-to-use modular templates for `control.lua`, `data.lua`, `settings.lua`, `info.json`, a modular `dispatcher.lua`, and a semantic `migration.lua` pipeline.
 
 ## Requirements
 
@@ -30,8 +31,6 @@ This discovers `SKILL.md` at the repo root and installs it for your agent (Claud
 
 ### Option 2: OpenCode
 
-Clone into the skills directory:
-
 ```bash
 git clone https://github.com/Jaer985/factorio-modding-skill.git ~/.config/opencode/skills/factorio-modding
 ```
@@ -42,7 +41,7 @@ git clone https://github.com/Jaer985/factorio-modding-skill.git ~/.config/openco
 2. Copy the contents of `SKILL.md` (and relevant `references/` files) into your project's `.cursorrules` or Windsurf rules file.
 3. Or reference the skill path in your agent configuration.
 
-### Option 4: Claude Code
+### Option 5: Claude Code
 
 Include as a reference in your `CLAUDE.md` or `instructions.md`:
 
@@ -52,15 +51,15 @@ Reference the factorio-modding skill at /path/to/factorio-modding/SKILL.md
 Activate when working with .lua, info.json, or Factorio mod files.
 ```
 
-### Option 5: GitHub Copilot
+### Option 6: GitHub Copilot
 
 Copy relevant patterns from `references/01-patterns.md` into your `.github/copilot-instructions.md` or reference the repository in your agent instructions.
 
-### Option 6: Any LLM (Manual Prompt)
+### Option 7: Any LLM (Manual Prompt)
 
 Copy the contents of `SKILL.md` directly into your system prompt or conversation context when working on Factorio mods. You can also include specific `references/*.md` files as needed.
 
-### Option 7: Per-Project Install (Git Submodule)
+### Option 8: Per-Project Install (Git Submodule)
 
 ```bash
 git submodule add https://github.com/Jaer985/factorio-modding-skill.git .ai/skills/factorio-modding
@@ -81,13 +80,14 @@ The skill activates **automatically** when working with Factorio mod files. You 
 
 When the skill is active, the AI will:
 
-1. **Before writing any code** — verify API signatures and prototype fields against the official Factorio Lua API docs.
-2. **Check licenses** — before referencing or modifying third-party mod code.
-3. **Namespace everything** — all prototypes, settings, and remote interfaces will be prefixed with your mod name.
-4. **Add guards** — every `data.raw` access, remote interface call, and storage read will be safely guarded.
-5. **Prevent desyncs** — no storage writes in `on_load`, deterministic-only operations, identical event registration.
-6. **Optimize performance** — filtered events, throttled ticks, tracked entity patterns.
-7. **Research unknowns** — if something isn't in the API docs, the AI will search the Factorio forums, wiki, and web before writing code.
+1. **Before writing data-stage prototypes** — execute the native `verify_prototype_definition(type, name)` tool to validate schema specifications.
+2. **Consult Factorio 2.0 dynamic RAG** — instead of legacy static Markdown files, verify API signatures using vectorized docs.
+3. **Ingest log crash dumps** — monitor `factorio-current.log` asynchronously to diagnose errors and devises technical hypotheses before patching.
+4. **Pass CI Linting** — block executions if any undeclared globals or typing violations are caught by `luacheck`.
+5. **Implement Modular Event Dispatchers** — structure mod control files using dispatchers to optimize UPS.
+6. **Integrate Semantic Migration Pipelines** — prevent multiplayer desyncs by checking version mutations on `storage` inside `on_configuration_changed`.
+7. **Namespace everything** — all prototypes, settings, and remote interfaces will be prefixed with the mod name to avoid collisions.
+8. **Add guards** — every `data.raw` access, remote interface call, and storage read will be safely guarded.
 
 ### How to Activate
 
@@ -104,17 +104,17 @@ Different tools activate custom instructions in different ways:
 
 ### Reference Files
 
-The skill is modular. The main `SKILL.md` is the runtime contract, and detailed knowledge is in `references/`:
+The main `SKILL.md` is the runtime contract. Detailed knowledge is processed dynamically via the RAG pipeline. The static `references/` directory is deprecated:
 
-| File | Content |
-|------|---------|
-| `references/01-patterns.md` | Code examples: boilerplate, prototypes, remote interfaces, GUIs, migrations, locale |
-| `references/02-troubleshooting.md` | Debugging guide: error categories, desync hunting, profiling |
-| `references/03-compatibility.md` | Inter-mod patterns: namespacing, safe interop, conflict detection |
-| `references/04-research-protocol.md` | Zero-assumption deep dive, web research workflow, source authority |
-| `references/05-lua-performance.md` | UPS optimization: event filtering, entity tracking, table allocation |
-| `references/06-cpp-engine.md` | 2.0 migration: C++ engine changes, API migration table, Space Age systems |
-| `assets/templates/` | Boilerplate templates for quick mod scaffolding |
+| File | Status | Content |
+|------|--------|---------|
+| `references/*` | DEPRECATED | Static legacy patterns (moved to dynamic RAG) |
+| `assets/templates/boilerplate-control.lua` | ACTIVE | Orchestrates modular control flow |
+| `assets/templates/boilerplate-dispatcher.lua` | ACTIVE | Modular event dispatcher template (routes callbacks to minimize loop overhead) |
+| `assets/templates/boilerplate-migration.lua` | ACTIVE | Semantic migration pipeline template (handles version storage updates) |
+| `assets/templates/boilerplate-data.lua` | ACTIVE | Safe prototype definitions with wrapped icons and standard 2.0 trigger syntax |
+| `assets/templates/boilerplate-settings.lua` | ACTIVE | Boilerplate for global and startup settings |
+| `assets/templates/info.json` | ACTIVE | Mod metadata schema |
 
 ## What It Covers
 
@@ -156,19 +156,16 @@ The skill is modular. The main `SKILL.md` is the runtime contract, and detailed 
 
 ```
 factorio-modding/
-├── SKILL.md              # Runtime contract (frontmatter, hard rules, decision gates)
+├── SKILL.md              # Runtime contract (rules, decision gates, dynamic RAG & tool specs)
 ├── README.md             # This file
 ├── LICENSE               # MIT License
-├── references/           # Detailed knowledge and examples
-│   ├── 01-patterns.md
-│   ├── 02-troubleshooting.md
-│   ├── 03-compatibility.md
-│   ├── 04-research-protocol.md
-│   ├── 05-lua-performance.md
-│   └── 06-cpp-engine.md
+├── references/           # DEPRECATED (Moved to Dynamic RAG Pipeline)
+│   ├── ...
 ├── assets/
 │   └── templates/        # Boilerplate templates
 │       ├── boilerplate-control.lua
+│       ├── boilerplate-dispatcher.lua
+│       ├── boilerplate-migration.lua
 │       ├── boilerplate-data.lua
 │       ├── boilerplate-settings.lua
 │       └── info.json

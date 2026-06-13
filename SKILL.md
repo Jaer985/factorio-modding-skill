@@ -28,10 +28,11 @@ Load this skill when working with any of these patterns (file or task context):
 
 ### Zero-Assumption Principle
 **Never assume — always verify.** Every external dependency, API method, prototype field, event parameter, and data structure MUST be verified against these sources before use:
-1. [Factorio Lua API docs](https://lua-api.factorio.com/latest) — runtime, prototype, auxiliary
-2. [wube/factorio-data](https://github.com/wube/factorio-data) — base game prototypes
-3. [data.raw reference](https://wiki.factorio.com/Data.raw) — complete prototype index
-4. Web search for 2.0+ specific behavior when docs are unclear
+1. **Dynamic RAG Pipeline**: Deprecated static Markdown documents in `references/`. The environment uses a dynamic vectorization pipeline that indexes the official Factorio 2.0 specs (Runtime API, Data Lifecycle, Prototypes) using structured embeddings to optimize context windows.
+2. **verify_prototype_definition(type, name) tool**: Native Function Calling definition in OpenCode. Before writing any prototype definition in `data.lua`, execute this tool to contrast data schemas against the official JSON specification.
+3. [wube/factorio-data](https://github.com/wube/factorio-data) — base game prototypes
+4. [data.raw reference](https://wiki.factorio.com/Data.raw) — complete prototype index
+5. Web search for 2.0+ specific behavior when docs are unclear
 
 If you cannot verify a method signature, prototype field, or event parameter via these sources, **stop and research** before writing code.
 
@@ -55,6 +56,10 @@ If you cannot verify a method signature, prototype field, or event parameter via
 - Use deterministic `math.random()` or `game.create_random_generator()`.
 - No I/O, no real-world clocks, no non-deterministic branching.
 - Event filters (`script.on_event` with filter tables) are MANDATORY for high-frequency events.
+
+### Automated Troubleshooting & Linting
+- **Log Ingestion Watcher**: Configured asynchronous file watcher on `factorio-current.log`. On engine crashes or Lua runtime errors, the agent intercepts the stack trace, halts execution, dumps a structured diagnostic, and devises a technical hypothesis before writing the fix.
+- **Strict Pre-Execution Linting**: Integrating `luacheck` configured with environment `std+factorio` as a blocking step in the agent's internal CI loop. Code iterations with undeclared global accesses, strict typing violations, or syntax inefficiencies are rejected.
 
 ### Compatibility & Licensing
 - **License check first**: Before reading/modifying external mod code, check `info.json` `license` field and any `LICENSE` file.
@@ -130,17 +135,18 @@ When finishing Factorio modding work, return:
 
 ## References
 
-All detailed patterns, examples, and deep dives are in `references/`:
+> [!IMPORTANT]
+> The static Markdown documents in `references/` are officially DEPRECATED. Rely on the dynamic RAG pipeline, the native `verify_prototype_definition` tool, and the authoritative sources below.
 
-| File | Covers |
-|------|--------|
-| `references/01-patterns.md` | All code patterns: boilerplate, prototypes, GUIs, remote interfaces, migrations |
-| `references/02-troubleshooting.md` | Debugging, error patterns, desync hunting, log analysis |
-| `references/03-compatibility.md` | Inter-mod compatibility, safe interop, namespace conventions |
-| `references/04-research-protocol.md` | Zero-assumption deep dive, web research workflow |
-| `references/05-lua-performance.md` | Factorio-specific Lua optimization, UPS tuning |
-| `references/06-cpp-engine.md` | C++ engine additions in 2.0, API changes, migration from 1.1 |
-| `assets/templates/` | Boilerplate: control.lua, data.lua, settings.lua, info.json |
+| File | Status | Covers |
+|------|--------|--------|
+| `references/*` | DEPRECATED | Static legacy patterns (moved to dynamic RAG) |
+| `assets/templates/boilerplate-control.lua` | ACTIVE | Modular control entrypoint orchestration template |
+| `assets/templates/boilerplate-dispatcher.lua` | ACTIVE | Modular Event Dispatcher callback enrouting template |
+| `assets/templates/boilerplate-migration.lua` | ACTIVE | Semantic Migration Pipeline storage versioning template |
+| `assets/templates/boilerplate-data.lua` | ACTIVE | Data stage prototype definition templates |
+| `assets/templates/boilerplate-settings.lua` | ACTIVE | Settings definition template |
+| `assets/templates/info.json` | ACTIVE | Mod metadata schema |
 
 ### Authoritative Sources
 - [Factorio Lua API (latest)](https://lua-api.factorio.com/latest) — Start here for ALL API questions
@@ -150,6 +156,6 @@ All detailed patterns, examples, and deep dives are in `references/`:
 - [wube/factorio-data](https://github.com/wube/factorio-data) — Base game prototype definitions
 - [data.raw Wiki](https://wiki.factorio.com/Data.raw) — Complete prototype type index
 - [Lua 5.2 Reference Manual](https://www.lua.org/manual/5.2/)
-- [Factorio Changelogs](https://factorio.com/blog/) — Track 2.0+ changes
+- [Factorio Changelogs](https://factorio.com/blog/)
 - [Factorio Modding Forum](https://forums.factorio.com/viewforum.php?f=25)
 - [Unofficial Factorio Modding Wiki](https://wiki.factorio.com/Modding)
