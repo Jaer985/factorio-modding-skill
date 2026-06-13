@@ -8,6 +8,7 @@
 local pairs = pairs
 local get_entity = game.get_entity_by_unit_number
 local get_player = game.get_player
+local table_deepcopy = require("util").table.deepcopy
 
 -- ============================================
 -- Debug Toggle (set false before release)
@@ -31,6 +32,7 @@ script.on_init(function()
   storage["my-mod-name"] = {
     players = {},
     my_entities = {},
+    entity_count = 0,
     iterator_keys = {}
   }
   debug_log("Mod initialized")
@@ -67,6 +69,7 @@ script.on_event(defines.events.on_built_entity, function(event)
       position = entity.position,
       created_tick = game.tick
     }
+    mod_storage.entity_count = mod_storage.entity_count + 1
   end
 end, {{filter = "name", name = "my-mod-entity"}})
 
@@ -76,6 +79,7 @@ script.on_event(defines.events.on_player_mined_entity, function(event)
   local mod_storage = storage["my-mod-name"]
   if mod_storage and entity and mod_storage.my_entities[entity.unit_number] then
     mod_storage.my_entities[entity.unit_number] = nil
+    mod_storage.entity_count = mod_storage.entity_count - 1
   end
 end, {{filter = "name", name = "my-mod-entity"}})
 
@@ -90,6 +94,11 @@ script.on_event(defines.events.on_tick, function(event)
   local batch_size = 50
   local current_key = mod_storage.iterator_keys.my_entities
 
+  -- Guard: If the tracked key was deleted externally, reset iterator to beginning
+  if current_key and not mod_storage.my_entities[current_key] then
+    current_key = nil
+  end
+
   for _ = 1, batch_size do
     local key, entity_data = next(mod_storage.my_entities, current_key)
     if not key then
@@ -98,14 +107,17 @@ script.on_event(defines.events.on_tick, function(event)
       return
     end
 
-    current_key = key
     local entity = get_entity(key)
     if entity and entity.valid then
       -- Process entity safely
       -- entity_data contains { unit_number, surface, position, created_tick }
+      current_key = key
     else
       -- Entity destroyed externally — garbage collect the orphaned entry
       mod_storage.my_entities[key] = nil
+      mod_storage.entity_count = mod_storage.entity_count - 1
+      -- Do NOT advance current_key to key, as key was deleted.
+      -- current_key remains the last valid key (or nil) for the next next() call.
     end
   end
 
@@ -123,17 +135,12 @@ remote.add_interface("my_mod_api", {
   get_entity_data = function(unit_number)
     local mod_storage = storage["my-mod-name"]
     if not (mod_storage and mod_storage.my_entities[unit_number]) then return nil end
-    return mod_storage.my_entities[unit_number]
+    return table_deepcopy(mod_storage.my_entities[unit_number])
   end,
 
   get_entity_count = function()
     local mod_storage = storage["my-mod-name"]
-    if not mod_storage then return 0 end
-    local count = 0
-    for _ in pairs(mod_storage.my_entities) do
-      count = count + 1
-    end
-    return count
+    return mod_storage and mod_storage.entity_count or 0
   end
 })
 

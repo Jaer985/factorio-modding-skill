@@ -72,6 +72,11 @@ script.on_event(defines.events.on_tick, function(event)
   local batch_size = 50
   local current_key = mod_storage.iterator_keys.my_entities
 
+  -- Guard: If the tracked key was deleted externally, reset iterator to beginning
+  if current_key and not mod_storage.my_entities[current_key] then
+    current_key = nil
+  end
+
   for _ = 1, batch_size do
     local key, entity_data = next(mod_storage.my_entities, current_key)
     if not key then
@@ -79,8 +84,18 @@ script.on_event(defines.events.on_tick, function(event)
       mod_storage.iterator_keys.my_entities = nil
       return
     end
-    current_key = key
-    -- process entity_data
+
+    -- Process entity safely
+    local entity = get_entity(key)
+    if entity and entity.valid then
+      -- process entity_data
+      current_key = key
+    else
+      -- If the entity is invalid/destroyed, delete the entry.
+      -- Since 'key' is now deleted, do NOT set current_key to it,
+      -- otherwise the next tick's next() call will crash.
+      mod_storage.my_entities[key] = nil
+    end
   end
 
   mod_storage.iterator_keys.my_entities = current_key

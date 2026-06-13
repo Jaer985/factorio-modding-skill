@@ -195,7 +195,7 @@ local trigger_tech = {
   },
   research_trigger = {
     type = "mine-entity",
-    entity = "crude-oil",
+    entity = "iron-ore",
     amount = 500
   }
 }

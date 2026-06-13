@@ -1,55 +1,43 @@
-# Factorio Modding Skill — Unified Walkthrough
+# Factorio Modding Skill — Complete Audit & Refactoring Walkthrough
 
-This document registers all 9 structural and logical corrections applied to the templates and reference guides of the `factorio-modding` skill to ensure compatibility with Factorio 2.0 / Space Age and robustness for autonomous agent environments like OpenCode.
+This document records the complete set of 12 structural, logical, and performance corrections applied to the templates and reference guides of the `factorio-modding` skill to ensure compatibility with Factorio 2.0 / Space Age, safety against multiplayer desyncs, and robustness for autonomous agent environments (such as OpenCode).
 
 ---
 
 ## Technical Audit & Fixes applied
 
-### Phase 1: Engine and Loop Corrections
+### 1. Loop Correctness & Batch Iteration (Data Starvation & Crashes)
+* **Files:** [05-lua-performance.md](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/references/05-lua-performance.md) & [boilerplate-control.lua](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/assets/templates/boilerplate-control.lua)
+* **Issue A (Data Starvation):** The initial template processed batches using `pairs` and interrupted the loop when reaching `batch_size`. Since `pairs` doesn't preserve iteration order, the same first items were processed repeatedly while others suffered from starvation.
+* **Issue B (Invalid Key to Next Crash):** Traversal using `next(table, key)` crashes with "invalid key to 'next'" if `key` is deleted from the table (either by orphan cleanup during the loop, or externally by other events).
+* **Fix:** Implemented a robust stateful `next()` cursor saved in `storage`. Added a key existence guard (`if current_key and not my_entities[current_key] then current_key = nil`) to reset safely on external deletions, and prevented cursor advancement when deleting orphaned entities during the loop.
 
-1. **Staggered Iteration (Tick Throttling)**
-   - **File:** [05-lua-performance.md](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/references/05-lua-performance.md) & [boilerplate-control.lua](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/assets/templates/boilerplate-control.lua)
-   - **Bug:** The `#` operator was used on associative tables (keyed by `unit_number` maps), which evaluates to `0` in Lua 5.2.1 and silently prevented any execution of the loops.
-   - **Fix:** Refactored to a stateful iterator using `next()` to safely persist progress across ticks.
+### 2. State Mutation via Remote Interface (Desync Prevention)
+* **File:** [boilerplate-control.lua](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/assets/templates/boilerplate-control.lua)
+* **Issue:** The `get_entity_data` API returned raw references to tables stored in `storage`. In Lua, tables are passed by reference, enabling third-party mods to directly mutate internal state, causing multiplayer desyncs.
+* **Fix:** Imported Factorio's native `util` library and wrapped the returned payloads in `util.table.deepcopy()`.
 
-2. **Entity Validity Guard Checks**
-   - **File:** [boilerplate-control.lua](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/assets/templates/boilerplate-control.lua)
-   - **Bug:** Mod iterated data without resolving entity pointers or checking `.valid`, causing potential crashes if entities were mined/destroyed by external mods or gameplay.
-   - **Fix:** Integrated `game.get_entity_by_unit_number()` checking for validity and garbage collecting invalid pointers. Also resolved a bug in [05-lua-performance.md](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/references/05-lua-performance.md) where `surface.find_entity()` was incorrectly called with a `unit_number` instead of position.
+### 3. API Query Complexity (O(N) to O(1) Optimization)
+* **File:** [boilerplate-control.lua](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/assets/templates/boilerplate-control.lua)
+* **Issue:** `get_entity_count` walked the entire `storage.my_entities` table on every call to sum items (O(N)), locking the main thread needlessly on high entity counts.
+* **Fix:** Added a tracked `entity_count` counter inside isolated storage, maintaining it at insertion (`on_built_entity`), deletion (`on_player_mined_entity`), and cleanup (`on_tick`) for O(1) complexity.
 
-3. **Fluidbox 2.0 Schema Adaptations**
-   - **File:** [01-patterns.md](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/references/01-patterns.md)
-   - **Bug:** Modified `fluid_boxes` directly, but Factorio 2.0 split many prototypes into explicit `input_fluid_box` and `output_fluid_box` parameters.
-   - **Fix:** Implemented a type check cascade that safely detects `input_fluid_box` (2.0 native schema) first, falling back to the legacy `fluid_boxes` array format.
+### 4. Technology Research Trigger Semantics
+* **File:** [01-patterns.md](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/references/01-patterns.md)
+* **Issue:** The `mine-entity` research trigger example used `crude-oil`. Crude oil is a fluid resource processed via pumpjacks, which does not fit the mechanical validation of "mining".
+* **Fix:** Replaced with `"iron-ore"`, a solid minable resource, aligning with the engine's validation rules.
 
-4. **Module-Scope Locality Caching**
-   - **File:** [05-lua-performance.md](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/references/05-lua-performance.md) & [boilerplate-control.lua](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/assets/templates/boilerplate-control.lua)
-   - **Enhancement:** Cached frequent standard library functions (`pairs`, `math_min`) and API calls (`game.get_player`, `game.get_entity_by_unit_number`) at module scope to completely avoid hash lookups at 60 UPS.
+### 5. Multi-Agent Storage Isolation (OpenCode Standards)
+* **Files:** [boilerplate-control.lua](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/assets/templates/boilerplate-control.lua) & [05-lua-performance.md](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/references/05-lua-performance.md)
+* **Fix:** Isolated variables under `storage["my-mod-name"]` instead of writing keys directly to the global `storage` space. This avoids namespace collisions when multi-agent codebases are merged.
 
 ---
 
-### Phase 2: Structural and Syntax Corrections
-
-5. **Data Stage Icons Arrays (Crash Fix)**
-   - **File:** [boilerplate-data.lua](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/assets/templates/boilerplate-data.lua)
-   - **Bug:** Assigned the return value of `icon(name, size)` (a single table dictionary `{ icon = ..., icon_size = ... }`) directly to `icons` (plural). The Factorio engine crashes immediately with `Property icons is not an array`.
-   - **Fix:** Wrapped the `icon` helper returns inside an array format `{ icon(...) }` for all `icons` definitions (items, recipes, technologies).
-
-6. **Event-Based Interoperability (API Break Fix)**
-   - **File:** [03-compatibility.md](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/references/03-compatibility.md)
-   - **Bug:** Code instructed to trigger and listen via `defines.events.on_custom_event_name`. However, `defines.events` is a static, C++ controlled read-only enum. Generating custom events returns a dynamic integer ID which does NOT get injected there.
-   - **Fix:** Replaced with the correct public interface registration pattern. Mod A registers and shares the event ID via `remote.add_interface`, and Mod B retrieves it to subscribe.
-
-7. **C++ Event Filters Syntax Alignment**
-   - **File:** [06-cpp-engine.md](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/references/06-cpp-engine.md)
-   - **Bug:** Documented filter parameters in event registration using `{filter = {name = "my-entity"}}` which is malformed.
-   - **Fix:** Aligned with Factorio 2.0 structure using nested arrays: `{{filter = "name", name = "my-entity"}}`.
-
-8. **Technology Research Ingredients Standard**
-   - **File:** [boilerplate-data.lua](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/assets/templates/boilerplate-data.lua)
-   - **Enhancement:** Converted array shorthand research ingredients (`{"automation-science-pack", 1}`) to the formal Factorio 2.0 standard object format `{type = "item", name = "automation-science-pack", amount = 1}` to avoid deprecation warnings.
-
-9. **OpenCode Multi-Agent Storage Isolation**
-   - **File:** [boilerplate-control.lua](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/assets/templates/boilerplate-control.lua) & [05-lua-performance.md](file:///C:/Users/jaer1/.gemini/skills/factorio-modding/references/05-lua-performance.md)
-   - **Best Practice:** Prevented global namespace pollution under the engine-persisted `storage` table. Isolated mod variables within namespaces such as `storage["my-mod-name"]` so merged agentic files do not collide.
+### Phase 1 Audit Legacy Fixes (Recap)
+6. **Data Stage Icons Arrays:** Changed `icons = icon(...)` to `icons = {icon(...)}` in `boilerplate-data.lua` to prevent C++ array property loader crashes.
+7. **Event-Based Interop:** Replaced invalid `defines.events.on_custom_event_name` lookups with `script.generate_event_name()` and dynamic subscription via remote interfaces.
+8. **C++ Event Filters Syntax:** Fixed malformed filter definitions in `06-cpp-engine.md` to use nested arrays `{{filter = "name", name = "my-entity"}}`.
+9. **Technology Ingredients Standard:** Standardized automation pack ingredients in `boilerplate-data.lua` to the 2.0 object format `{type = "item", name = "...", amount = 1}`.
+10. **Module-Scope Locality Caching:** Cached standard library pointers (`pairs`, `util`) and Factorio API methods locally at the top of control files to bypass Lua hash tables.
+11. **Fluidbox 2.0 Schema Adaptations:** Added input/output fluidbox structural checks inside prototype safe-update routines in `01-patterns.md`.
+12. **Validity Guards:** Included O(1) `game.get_entity_by_unit_number()` lookups with `.valid` validation prior to hot-path modifications.
