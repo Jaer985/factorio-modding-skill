@@ -46,16 +46,44 @@ end)
 
 script.on_configuration_changed(function(data)
   -- Handle mod version migrations
-  -- Check data.mod_changes to determine what changed
   debug_log("Configuration changed")
+
+  -- Mid-game initialization scan (if mod is added to an existing save)
+  local changes = data.mod_changes and data.mod_changes["my-mod-name"]
+  if changes and not changes.old_version then
+    local mod_storage = storage["my-mod-name"]
+    if not mod_storage then return end
+
+    local count = 0
+    for _, surface in pairs(game.surfaces) do
+      for _, entity in pairs(surface.find_entities_filtered({name = "my-mod-entity"})) do
+        if not mod_storage.my_entities[entity.unit_number] then
+          mod_storage.my_entities[entity.unit_number] = {
+            unit_number = entity.unit_number,
+            surface_index = surface.index,
+            position = entity.position,
+            created_tick = game.tick
+          }
+          count = count + 1
+        end
+      end
+    end
+    mod_storage.entity_count = count
+  end
 end)
 
 -- ============================================
 -- Event Handlers
 -- ============================================
 
--- Track placed entities
-script.on_event(defines.events.on_built_entity, function(event)
+-- Track placed/created entities (covers players, robots, and scripts)
+local built_events = {
+  defines.events.on_built_entity,
+  defines.events.on_robot_built_entity,
+  defines.events.script_raised_built
+}
+
+local function handle_entity_creation(event)
   local entity = event.entity
   if not (entity and entity.valid) then return end
 
@@ -65,23 +93,40 @@ script.on_event(defines.events.on_built_entity, function(event)
   if entity.name == "my-mod-entity" then
     mod_storage.my_entities[entity.unit_number] = {
       unit_number = entity.unit_number,
-      surface = entity.surface.name,
+      surface_index = event.surface_index or entity.surface.index,
       position = entity.position,
-      created_tick = game.tick
+      created_tick = event.tick or game.tick
     }
     mod_storage.entity_count = mod_storage.entity_count + 1
   end
-end, {{filter = "name", name = "my-mod-entity"}})
+end
 
--- Clean up mined entities
-script.on_event(defines.events.on_player_mined_entity, function(event)
+for _, event_id in ipairs(built_events) do
+  script.on_event(event_id, handle_entity_creation, {{filter = "name", name = "my-mod-entity"}})
+end
+
+-- Clean up removed/destroyed entities (covers mined, robot mined, died, and scripts)
+local destruction_events = {
+  defines.events.on_player_mined_entity,
+  defines.events.on_robot_mined_entity,
+  defines.events.on_entity_died,
+  defines.events.script_raised_destroy
+}
+
+local function handle_entity_removal(event)
   local entity = event.entity
+  if not entity then return end
+
   local mod_storage = storage["my-mod-name"]
-  if mod_storage and entity and mod_storage.my_entities[entity.unit_number] then
+  if mod_storage and mod_storage.my_entities[entity.unit_number] then
     mod_storage.my_entities[entity.unit_number] = nil
     mod_storage.entity_count = mod_storage.entity_count - 1
   end
-end, {{filter = "name", name = "my-mod-entity"}})
+end
+
+for _, event_id in ipairs(destruction_events) do
+  script.on_event(event_id, handle_entity_removal, {{filter = "name", name = "my-mod-entity"}})
+end
 
 -- Timed processing (stateful batch iterator)
 -- Uses next() to persist hash pointer across ticks.
