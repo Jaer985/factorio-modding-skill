@@ -6,7 +6,7 @@ Drop these files into any AI coding assistant that supports custom instructions 
 
 ## Features
 
-- **Zero-Assumption Dynamic RAG** — The static `references/` files are deprecated. The AI uses a dynamic vectorization pipeline that indexes the official Factorio 2.0 specs (Runtime API, Data Lifecycle, Prototypes) using structured embeddings to optimize context windows and ensure determinism.
+- **Dump-Driven Knowledge Library** — `references/` and `scripts/` are the **ACTIVE** knowledge library: 48 reference files covering dump-driven audits, Factorio 2.1 breaking changes, DMR lessons, and release/privacy checks — plus 8 audit/analysis scripts (tier progression, locale parity, prototype parsing, privacy scan).
 - **verify_prototype_definition(type, name) tool** — Integrated native Function Calling in OpenCode to contrast mod schemas in `data.lua` against the official JSON specification in real time.
 - **Automated Log Watcher** — Asynchronous file watcher on `factorio-current.log` that automatically intercepts stack traces on engine crashes or Lua runtime errors to formulate technical hypotheses before patching.
 - **Strict Pre-Execution Linting** — Integrates `luacheck` configured with the `std+factorio` environment as a blocking step in the internal CI loop to reject undeclared globals or invalid typing.
@@ -53,7 +53,7 @@ Activate when working with .lua, info.json, or Factorio mod files.
 
 ### Option 6: GitHub Copilot
 
-Copy relevant patterns from `references/01-patterns.md` into your `.github/copilot-instructions.md` or reference the repository in your agent instructions.
+Copy relevant patterns from the `references/` library into your `.github/copilot-instructions.md` or reference the repository in your agent instructions.
 
 ### Option 7: Any LLM (Manual Prompt)
 
@@ -81,7 +81,7 @@ The skill activates **automatically** when working with Factorio mod files. You 
 When the skill is active, the AI will:
 
 1. **Before writing data-stage prototypes** — execute the native `verify_prototype_definition(type, name)` tool to validate schema specifications.
-2. **Consult Factorio 2.0 dynamic RAG** — instead of legacy static Markdown files, verify API signatures using vectorized docs.
+2. **Consult the reference library** — load the relevant file under `references/` for dump-driven audits, Factorio 2.1 breaking changes, and DMR lessons; run the `scripts/` audits against real data-raw dumps.
 3. **Ingest log crash dumps** — monitor `factorio-current.log` asynchronously to diagnose errors and devises technical hypotheses before patching.
 4. **Pass CI Linting** — block executions if any undeclared globals or typing violations are caught by `luacheck`.
 5. **Implement Modular Event Dispatchers** — structure mod control files using dispatchers to optimize UPS.
@@ -104,11 +104,12 @@ Different tools activate custom instructions in different ways:
 
 ### Reference Files
 
-The main `SKILL.md` is the runtime contract. Detailed knowledge is processed dynamically via the RAG pipeline. The static `references/` directory is deprecated:
+The main `SKILL.md` is the runtime contract. `references/` (48 files) and `scripts/` (8 audit/analysis scripts) are the **active** knowledge library — dump-driven audits, Factorio 2.1 breaking changes, DMR lessons, and release/privacy checks:
 
-| File | Status | Content |
+| Directory | Status | Content |
 |------|--------|---------|
-| `references/*` | DEPRECATED | Static legacy patterns (moved to dynamic RAG) |
+| `references/` | ACTIVE | 48 files — audit playbooks, 2.1 breaking changes, compatibility lessons, release & privacy checks |
+| `scripts/` | ACTIVE | 8 Python scripts — tier progression audit, locale parity, prototype parsing, privacy scan, dump diagnostics |
 | `assets/templates/boilerplate-control.lua` | ACTIVE | Orchestrates modular control flow |
 | `assets/templates/boilerplate-dispatcher.lua` | ACTIVE | Modular event dispatcher template (routes callbacks to minimize loop overhead) |
 | `assets/templates/boilerplate-migration.lua` | ACTIVE | Semantic migration pipeline template (handles version storage updates) |
@@ -156,11 +157,14 @@ The main `SKILL.md` is the runtime contract. Detailed knowledge is processed dyn
 
 ```
 factorio-modding/
-├── SKILL.md              # Runtime contract (rules, decision gates, dynamic RAG & tool specs)
+├── SKILL.md              # Runtime contract (rules, decision gates, reference index)
 ├── README.md             # This file
 ├── LICENSE               # MIT License
-├── references/           # DEPRECATED (Moved to Dynamic RAG Pipeline)
+├── references/           # ACTIVE knowledge library — 48 files (audits, breaking changes, lessons)
 │   ├── ...
+├── scripts/              # ACTIVE audit/analysis scripts — 8 files
+│   ├── check-no-private-data.py
+│   └── ...
 ├── assets/
 │   └── templates/        # Boilerplate templates
 │       ├── boilerplate-control.lua
