@@ -237,9 +237,8 @@ data-final-fixes.lua — add a file under prototypes/fixes/ and require it in
 order. (PASS 6 was removed in v4.0; the comment lives in pass-generate.)
 
 **Privacy-scan pitfall**: `check-no-private-data.py` flags the literal string
-of a credential env-var NAME anywhere in the source tree — including
-ROADMAP.md / docs that MERELY MENTION where the token lives. Never write a
-real env-var name (nor its home path) into a
+`GITHUB_TOKEN` anywhere in the source tree — including ROADMAP.md / docs that
+MERELY MENTION where the token lives. Never write a real env-var name into a
 file that ships in the mod folder or gets pushed; paraphrase
 ("el token vive en el .env del perfil — ver skill").
 

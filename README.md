@@ -6,7 +6,7 @@ Drop these files into any AI coding assistant that supports custom instructions 
 
 ## Features
 
-- **Dump-Driven Knowledge Library** — `references/` and `scripts/` are the **ACTIVE** knowledge library: 48 reference files covering dump-driven audits, Factorio 2.1 breaking changes, DMR lessons, and release/privacy checks — plus 8 audit/analysis scripts (tier progression, locale parity, prototype parsing, privacy scan).
+- **Dump-Driven Knowledge Library** — `references/` and `scripts/` are the **ACTIVE** knowledge library: 65 reference files covering dump-driven audits, Factorio 2.1 breaking changes, DMR lessons, and release/privacy checks — plus 10 audit/analysis scripts (tier progression, locale parity, prototype parsing, privacy scan).
 - **verify_prototype_definition(type, name) tool** — Integrated native Function Calling in OpenCode to contrast mod schemas in `data.lua` against the official JSON specification in real time.
 - **Automated Log Watcher** — Asynchronous file watcher on `factorio-current.log` that automatically intercepts stack traces on engine crashes or Lua runtime errors to formulate technical hypotheses before patching.
 - **Strict Pre-Execution Linting** — Integrates `luacheck` configured with the `std+factorio` environment as a blocking step in the internal CI loop to reject undeclared globals or invalid typing.
@@ -104,12 +104,12 @@ Different tools activate custom instructions in different ways:
 
 ### Reference Files
 
-The main `SKILL.md` is the runtime contract. `references/` (48 files) and `scripts/` (8 audit/analysis scripts) are the **active** knowledge library — dump-driven audits, Factorio 2.1 breaking changes, DMR lessons, and release/privacy checks:
+The main `SKILL.md` is the runtime contract. `references/` (65 files) and `scripts/` (10 audit/analysis scripts) are the **active** knowledge library — dump-driven audits, Factorio 2.1 breaking changes, DMR lessons, and release/privacy checks:
 
 | Directory | Status | Content |
 |------|--------|---------|
-| `references/` | ACTIVE | 48 files — audit playbooks, 2.1 breaking changes, compatibility lessons, release & privacy checks |
-| `scripts/` | ACTIVE | 8 Python scripts — tier progression audit, locale parity, prototype parsing, privacy scan, dump diagnostics |
+| `references/` | ACTIVE | 65 files — audit playbooks, 2.1 breaking changes, compatibility lessons, release & privacy checks |
+| `scripts/` | ACTIVE | 9 Python scripts + 1 Lua probe — tier progression audit, locale parity, prototype parsing, privacy scan, dump diagnostics |
 | `assets/templates/boilerplate-control.lua` | ACTIVE | Orchestrates modular control flow |
 | `assets/templates/boilerplate-dispatcher.lua` | ACTIVE | Modular event dispatcher template (routes callbacks to minimize loop overhead) |
 | `assets/templates/boilerplate-migration.lua` | ACTIVE | Semantic migration pipeline template (handles version storage updates) |
@@ -160,9 +160,9 @@ factorio-modding/
 ├── SKILL.md              # Runtime contract (rules, decision gates, reference index)
 ├── README.md             # This file
 ├── LICENSE               # MIT License
-├── references/           # ACTIVE knowledge library — 48 files (audits, breaking changes, lessons)
+├── references/           # ACTIVE knowledge library — 65 files (audits, breaking changes, lessons)
 │   ├── ...
-├── scripts/              # ACTIVE audit/analysis scripts — 8 files
+├── scripts/              # ACTIVE audit/analysis scripts — 10 files
 │   ├── check-no-private-data.py
 │   └── ...
 ├── assets/

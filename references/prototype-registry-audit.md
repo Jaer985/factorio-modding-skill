@@ -1,166 +1,165 @@
 # Prototype registries & data-stage audit fixes (Factorio 2.x)
 
-Lecciones de clase del audit batch-3 de DMR (dump real 138 mods, sep-2026).
-Aplican a CUALQUIER mod que genere prototypes dinámicamente (data-final-fixes)
-y lo audite contra un dump de modlist real.
+Lessons from the DMR batch-3 audit (real dump 138 mods, sep-2026).
+Applies to ANY mod that generates prototypes dynamically (data-final-fixes)
+and audits it against a real modlist dump.
 
-## 1. data.raw.item NO es el único registry de items
+## 1. data.raw.item is not the only item registry
 
-Factorio 2.x separa clases de items en registries propios. Un guard
-defensivo `data.raw.item[name]` los escupe todos:
+Factorio 2.x separates item classes into their own registries. A defensive
+`data.raw.item[name]` guard misses them all:
 
-| Registry | Qué contiene | Ejemplo del dump |
+| Registry | What it contains | Example from dump |
 |---|---|---|
-| `item` | items genéricos | fast-inserter |
-| `tool` | **science packs** y herramientas | apicultural-science-pack, dmrsa-tenemut |
-| `ammo` | munición | piercing-rounds (66 en dump) |
-| `module` | módulos | speed-module (39) |
-| `capsule` | cápsulas | (35) |
-| `movement-bonus-equipment`, `energy-shield-equipment`, `night-vision-equipment`, `generator-equipment`, ... | equipo equipable (una registry POR categoría) | aircraft-afterburner |
+| `item` | generic items | fast-inserter |
+| `tool` | **science packs** and tools | apicultural-science-pack, dmrsa-tenemut |
+| `ammo` | ammunition | piercing-rounds (66 in dump) |
+| `module` | modules | speed-module (39) |
+| `capsule` | capsules | (35) |
+| `movement-bonus-equipment`, `energy-shield-equipment`, `night-vision-equipment`, `generator-equipment`, ... | equippable equipment (one registry PER category) | aircraft-afterburner |
 
-- **Síntoma típico**: "142 targets con quality sin recipes de refiner" — el
-  guard por registry estrecho los salta en silencio.
-- **Fix de clase**: resolver de prototypes multi-registry
-  (`{item, ammo, module, capsule, tool}` en orden) en UN helper y usarlo
-  en TODOS los guards del archivo.
-- **Pitfall de debugging**: si un item "no existe" en tu shard/dump, verificá
-  en qué registry cae ANTES de concluir que no existe. Un science pack type
-  `tool` no aparece en la sección `item` del dump — una hora se fue en el
-  misterio de "apicultural-science-pack ruteada a gleba sin explicación"
-  cuando el check inicial miraba la gaveta equivocada (y sí: era spoilable,
-  la regla gleba era correcta).
+- **Typical symptom**: "142 targets with quality but no refiner recipes" — the
+  narrow registry guard silently skips them.
+- **Class fix**: resolve from multi-registry prototypes
+  (`{item, ammo, module, capsule, tool}` in order) in a SINGLE helper and use it
+  in ALL guards in the file.
+- **Debugging pitfall**: if an item "does not exist" in your shard/dump, check
+  which registry it falls into BEFORE concluding it does not exist. A `tool` type
+  science pack does not appear in the dump's `item` section — an hour was lost on the
+  mystery of "apicultural-science-pack routed to gleba with no explanation"
+  when the initial check looked in the wrong drawer (and yes: it was spoilable,
+  the gleba rule was correct).
 
-## 2. Señales estructurales > patrones de nombre
+## 2. Structural signals > name patterns
 
-- `place_as_equipment_result` (en el PROTO) marca equipo equipable aunque el
-  nombre no contenga "-equipment". 4 leaks reales (aircraft-afterburner,
+- `place_as_equipment_result` (in the PROTO) marks equippable equipment even when the
+  name does not contain "-equipment". 4 real leaks (aircraft-afterburner,
   aircraft-energy-shield, angels-cab-energy-interface-mk1,
-  manual-color-module) escapaban a TODO patrón de nombre y escaparían a
-  cualquier mod nuevo con nombres creativos. El guard estructural los
-  captura a todos; excepciones de clase (solar/battery) se aplican igual.
-- Para routing planetario: `default_import_location` y producer
-  `surface_conditions` identifican items exclusivos de planeta EXACTAMENTE —
-  las heurísticas por keyword del nombre dejan escapar todo lo que no
-  matchea (13 items de fulgora en bandas numéricas).
+  manual-color-module) escaped EVERY name pattern and would escape
+  any new mod with creative names. The structural guard catches them all;
+  class exceptions (solar/battery) still apply.
+- For planetary routing: `default_import_location` and producer
+  `surface_conditions` identify planet-exclusive items EXACTLY —
+  keyword heuristics from the name miss everything that does not
+  match (13 items from fulgora in numeric bands).
 
-## 3. Herencia cruzada por prefijo vacío
+## 3. Cross-inheritance via empty prefix
 
-`mod_prefix(name)` que retorna `""` para nombres SIN guión hace que DOS
-items de mods distintos sin guión compartan "prefijo" (`sulfur` vanilla vs
-`biosulfur` de Bio Ind) → el item vanilla hereda la tech del mod ajeno
-(gleba T5). Fix de clase: prefijo vacío ≠ match — requiere prefijo REAL
-compartido (ambos con guión y mismo segmento).
+`mod_prefix(name)` returning `""` for names WITHOUT a hyphen causes TWO
+items from different mods without hyphens to share a "prefix" (`sulfur` vanilla vs
+`biosulfur` from Bio Ind) → the vanilla item inherits the foreign mod's tech
+(gleba T5). Class fix: empty prefix ≠ match — requires a REAL shared
+prefix (both with hyphen and same segment).
 
-## 4. Tus propias techs entran al reverse-map
+## 4. Your own techs enter the reverse-map
 
-Si generás techs `dmrsa-replication-N` (una por tier) y después construís
-un mapa tech→items desde TODAS las techs con unlock-recipe, tus propias
-techs entran y `normalize_tech_base()` colapsa los `-N` en UN mirror
-→ self-mirror roto (replicadores 1/2/4/5 en una tech t5, el tier-3
-secuestrado por la tech de otro planeta). Fix: filtrar `dmrsa%-` del
-reverse-map ANTES de llenarlo (blast radius = solo tus items propios).
+If you generate `dmrsa-replication-N` techs (one per tier) and then build
+a tech→items map from ALL techs with unlock-recipe, your own
+techs enter and `normalize_tech_base()` collapses the `-N` into ONE mirror
+→ broken self-mirror (replicators 1/2/4/5 in a t5 tech, tier-3
+hijacked by another planet's tech). Fix: filter `dmrsa%-` from the
+reverse-map BEFORE filling it (blast radius = only your own items).
 
-## 5. Anti-patrón: max-SCL-wins para elegir la tech de un item
+## 5. Anti-pattern: max-SCL-wins to choose an item's tech
 
-Elegir la tech desbloqueadora con MAYOR science level hace que items
-tempranos queden gated detrás de techs endgame (solid-fuel →
-planet-discovery-aquilo T5; lubricant/sulfur → bioflux T5). Modlists
-grandes re-gatean recipes de vanilla todo el tiempo. Fix de clase:
-TECH_REDIRECT manual por item (dump-proven) para los casos visibles, y
-regla de selección preferente por SCL más CERCANO al tier del solver, no
-el máximo.
+Choosing the unlocking tech with the HIGHEST science level causes early
+items to be gated behind endgame techs (solid-fuel →
+planet-discovery-aquilo T5; lubricant/sulfur → bioflux T5). Large
+modlists re-gate vanilla recipes all the time. Class fix:
+manual TECH_REDIRECT per item (dump-proven) for visible cases, and a
+preferential selection rule by SCL CLOSEST to the solver tier, not
+the maximum.
 
-## 6. Invariantes de routing dinámico
+## 6. Dynamic routing invariants
 
-- Un `planet_suffix` nuevo debe referenciar una categoría `replication-<X>`
-  EXISTENTE y una key del dict `planetary_unlocks` — asignar "space" sin
-  categoría crashea la carga. Antes de añadir una rama de routing:
-  verificar categoría + key.
-- VERIFICAR EN EL DUMP cada nombre de tech/item que hardcodeás
-  (TECH_REDIRECT, MOD_PACK_LEVELS, exclusiones) antes de escribir el patch.
-  Un nombre inexistente (`planetaris-gold-processing`) es un prereq
-  inválido en producción. Un query de 30s vs un crash del mod.
-- La inferencia dinámica de niveles (packs desconocidos) debe tener CAP:
-  el max-anchor sobre-ancla packs mid-game a T5 vía co-consumo en techs
-  endgame (62 mirrors inflados en el dump). Tier 5 = solo tablas/familias
-  explícitas.
+- A new `planet_suffix` must reference an EXISTING `replication-<X>`
+  category and a `planetary_unlocks` dict key — assigning "space" without
+  a category crashes the load. Before adding a routing branch:
+  verify category + key.
+- VERIFY IN THE DUMP every hardcoded tech/item name
+  (TECH_REDIRECT, MOD_PACK_LEVELS, exclusions) before writing the patch.
+  A non-existent name (`planetaris-gold-processing`) is an invalid prereq
+  in production. A 30s query vs a mod crash.
+- Dynamic level inference (unknown packs) must have a CAP:
+  the max-anchor over-anchors mid-game packs to T5 via co-consumption in endgame
+  techs (62 inflated mirrors in the dump). Tier 5 = only explicit tables/families.
 
 ## 7. Locale/code drift
 
-- Descripción de setting que dice "multiplicador (cost × (1+pen))" mientras
-  el código aplica "aditivo (cost + pen)" = el jugador tunea con el modelo
-  mental equivocado. Al cambiar la SEMÁNTICA de un setting, auditar su
-  descripción EN y ES.
-- Toda setting necesita key en `[mod-setting-name]` Y
-  `[mod-setting-description]` (el nombre cae al raw key con "Unknown key"
-  en el log). Contarlas: names == descs.
-- Verificar realidad de line-endings con bytes (CRLF vs LF) antes de
-  asumir la convención documentada — el doc puede estar stale.
+- Setting description says "multiplier (cost × (1+pen))" while
+  the code applies "additive (cost + pen)" = the player tunes with the wrong
+  mental model. When changing a setting's SEMANTICS, audit its
+  EN and ES description.
+- Every setting needs a key in `[mod-setting-name]` AND
+  `[mod-setting-description]` (the name falls to the raw key with "Unknown key"
+  in the log). Count them: names == descs.
+- Verify actual line-ending bytes (CRLF vs LF) before
+  assuming the documented convention — the doc may be stale.
 
-## 7. Listas single-source sincronizadas
+## 7. Synchronized single-source lists
 
-Cuando el mismo set de items vive en varias decisiones (gate de tier, filtro
-de hidden, whitelist de elegibilidad), declara UNA lista por archivo y
-mantenelas sincronizadas con comentario cruzado ("mirrors X, keep in sync").
-Caso real DMR D17: los 6 chunks espaciales viven en `SPACE_CHUNKS`
-(mirror-generator: gate t5+gravity0), `SPACE_CHUNK_TARGETS` (target-mapper:
-filtro de hidden) y `ELIGIBILITY_WHITELIST` (target-mapper: obtenibilidad) —
-auric/bismuth faltaban en la whitelist y escapaban TODA la cadena hasta
-llegar por accidente vía un swallow de steam-recycler.
+When the same item set lives in multiple decisions (tier gate, hidden
+filter, eligibility whitelist), declare ONE list per file and
+keep them synchronized with cross-references ("mirrors X, keep in sync").
+Real DMR case D17: the 6 space chunks live in `SPACE_CHUNKS`
+(mirror-generator: t5+gravity0 gate), `SPACE_CHUNK_TARGETS` (target-mapper:
+hidden filter) and `ELIGIBILITY_WHITELIST` (target-mapper: obtainability) —
+auric/bismuth were missing from the whitelist and escaped the ENTIRE chain until
+arriving by accident via a steam-recycler swallow.
 
-## 8. Debug de filtros por capas
+## 8. Layered filter debugging
 
-Si un check de test falla para un item que "debería" pasar, NO asumas que
-la capa obvia (el filtro que acabás de tocar) es la culpable. El pipeline
-de exclusión tiene CAPAS en orden (prefijo propio → blacklist → elegibilidad
-→ exclusiones v4 → hidden) y el fallo puede estar en una capa DIFERENTE a
-la editada. Caso real: test de chunks falló tras arreglar el filtro de
-hidden; la causa era la ELIGIBILITY_WHITELIST (otra capa, otro bloque).
-Método: correr el item contra cada capa en orden, no adivinar.
+If a test check fails for an item that "should" pass, do not assume the
+obvious layer (the filter you just touched) is the culprit. The exclusion
+pipeline has LAYERS in order (own prefix → blacklist → eligibility
+→ v4 exclusions → hidden) and the failure may be in a DIFFERENT layer than
+the one edited. Real case: chunk test failed after fixing the hidden
+filter; the cause was the ELIGIBILITY_WHITELIST (another layer, another block).
+Method: run the item against each layer in order, do not guess.
 
-## 9. Spread por nivel: elegibilidad dinámica + routing por membresía
+## 9. Level spread: dynamic eligibility + membership routing
 
-Para des-colapsar cadenas `-N` (un mirror por nivel de tech), la elegibilidad
-se computa DINÁMICAMENTE de la modlist cargada (no hardcodear cadenas —
-principio "adaptable a cualquier modlist"). Filtros dump-validated:
-1. la tech PLAIN de nivel 1 existe (si no, la cadena espejo rompe contigüidad);
-2. niveles contiguos 1..deepest;
-3. deepest >= 3 (cadenas 1-2 no tienen brecha real);
-4. cada nivel se queda con >=1 item (atribución: min nivel cuya tech
-   desbloquea una recipe productora del item; huérfanos → deepest);
-5. span de tiers >= 2 (si no, el split no cambia gameplay, solo ruido).
+To un-collapse `-N` chains (one mirror per tech level), eligibility
+is computed DYNAMICALLY from the loaded modlist (do not hardcode chains —
+principle "adaptable to any modlist"). Dump-validated filters:
+1. level 1 PLAIN tech exists (otherwise the mirror chain breaks contiguity);
+2. contiguous levels 1..deepest;
+3. deepest >= 3 (1-2 chains have no real gap);
+4. each level keeps >=1 item (attribution: minimum level whose tech
+   unlocks a producing recipe of the item; orphans → deepest);
+5. tier span >= 2 (otherwise the split does not change gameplay, only noise).
 
-Y el routing de items a su nivel es por MEMBRESÍA (`map[item]`
-pre-construido), no por iteración de las techs del item: iterar techs puede
-desviar un item al fallback de best-tech y dejar un mirror de nivel VACÍO →
-crash "Non-contiguous levels". El map garantiza base + niveles no vacíos.
-En el loop de tier, los mirrors por-nivel toman el tier de sus ITEMS
-(costo/máquina), NO el SCL de la tech original — un level-N tech investiga
-con packs profundos mientras sus items son mid-game (ese es el punto del
+And item routing to its level is by MEMBERSHIP (`map[item]`
+pre-built), not by iterating the item's techs: iterating techs can
+divert an item to the best-tech fallback and leave a level mirror EMPTY →
+"Non-contiguous levels" crash. The map guarantees base + non-empty levels.
+In the tier loop, per-level mirrors take the tier of their ITEMS
+(cost/machine), NOT the SCL of the original tech — a level-N tech is researched
+with deep packs while its items are mid-game (that is the point of the
 spread).
 
-## 10. Rebalance grande = simulación read-only ANTES de tocar código
+## 10. Large rebalance = read-only simulation BEFORE touching code
 
-Para rebalances que tocan todo el dataset (re-escala de costos, cambio de
-routing global): NO implementar directo. Fase intermedia: dispatch 1-2
-subagentes READ-ONLY que (a) diseñan el modelo concreto, (b) lo simulan en
-Python sobre el dump, (c) entregan el antes/después (distribución por tier,
-% en bordes, outliers, regresiones). Presentar los números al usuario →
-implementar solo con OK. La lección del gate test 4.2.0 (depth clamp infló
-458/474 mirrors a t5 — detectado EN el dump, después de implementar) es la
-razón: el rebalance equivocado se ve en la simulación, no en código.
-Baseline de la sim = código vigente recategorizado con las reglas actuales,
-no el dump crudo de una versión vieja.
+For rebalances touching the entire dataset (cost rescale, global routing
+change): do not implement directly. Intermediate phase: dispatch 1-2
+READ-ONLY subagents that (a) design the concrete model, (b) simulate it in
+Python on the dump, (c) deliver the before/after (distribution by tier,
+% at edges, outliers, regressions). Present the numbers to the user →
+implement only with OK. The lesson from gate test 4.2.0 (depth clamp inflated
+458/474 mirrors to t5 — detected IN the dump, after implementing) is the
+reason: the wrong rebalance is visible in simulation, not in code.
+Simulation baseline = current code recategorized with the current rules,
+not the raw dump from an old version.
 
-## Workflow del fix (validado)
+## Fix workflow (validated)
 
-1. Backup de archivos a tocar → `backups/<batch>-pre/`.
-2. Evidencia del dump ANTES del patch (nombres, flags, categorías).
-3. Patch → `luac5.2 -p <file>` → suite completa (los 4 test files).
-4. Tests de regresión NUEVOS para cada fix de clase (fixture que reproduce
-   el leak + check del comportamiento esperado).
-5. Docs del proyecto al día (ROADMAP/AGENTS) con lo aplicado vs lo
-   pendiente de decisión — separar "bug con fix claro" de "decisión de
-   diseño".
-6. Rebalance global (costos/routing): SIMULACIÓN read-only primero (ver §10)
-   — presentación con números al usuario antes del patch.
+1. Backup files to touch → `backups/<batch>-pre/`.
+2. Dump evidence BEFORE the patch (names, flags, categories).
+3. Patch → `luac5.2 -p <file>` → full suite (all 4 test files).
+4. NEW regression tests for each class fix (fixture reproducing
+   the leak + expected behavior check).
+5. Project docs up to date (ROADMAP/AGENTS) with what was applied vs
+   pending decisions — separate "bug with clear fix" from "design
+   decision".
+6. Global rebalance (costs/routing): READ-ONLY simulation first (see §10)
+   — present with numbers to the user before the patch.

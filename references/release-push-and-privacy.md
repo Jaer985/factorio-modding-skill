@@ -11,8 +11,8 @@ BOTH the git staging area AND the zip contents. Scriptable pattern:
 
 ```python
 # Check repo or zip contents for leaks
-sensitive_pats = ['github_pat_', 'ghp_', 'gho_', 'ghs_', '<token-env-var-name>',
-                  '<private-home-path>', '<account-name>', 'password', 'api_key', 'secret']
+sensitive_pats = ['github_pat_', 'ghp_', 'GITHUB_TOKEN', 'GITHUB_PERSONAL',
+                  '~', 'servicesjmtech', 'password', 'api_key', 'secret']
 name_pats = ['.env', '.pem', '.key', '.ds_store', 'thumbs.db']
 # For each file (text): content scan for sensitive_pats
 # For each file name: check name_pats
@@ -39,13 +39,12 @@ Only AFTER the failure did we discover the token's permissions were pull-only.
 **Pattern — validate token + repo permission FIRST:**
 
 ```bash
-# Load the GitHub token from the profile env file (see the privacy-scan section)
-TOKEN=$(grep -iE '^[a-z_]*token[a-z_]*=' "$PROFILE_ENV_FILE" | cut -d= -f2 | tr -d '\n\r')
+export GITHUB_TOKEN=$(grep "^GITHUB_TOKEN=" ~/.hermes/.env | cut -d= -f2 | tr -d '\n\r')
 # 1. Who owns the token?
-curl -s -H "Authorization: Bearer $TOKEN" https://api.github.com/user
+curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/user
 #   → "login": "<account>" — compare with the repo owner
 # 2. What permissions does it have on the TARGET repo?
-curl -s -H "Authorization: Bearer $TOKEN" \
+curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
   "https://api.github.com/repos/<owner>/<repo>"
 #   → "permissions": {"admin":..., "push":..., "pull":...}
 #   push must be true; a fine-grained PAT must have Contents: Read and write
@@ -57,14 +56,17 @@ Diagnostics:
   account (Y ≠ repo owner) or lacks write scope. Check `permissions.push`.
 - `login: None` + `"message": "Bad credentials"` → same as 401.
 
-Store the working token in the profile env file (the github-auth skill
-reads it from there). Note: a token that works for API read
+Store the working token in `~/.hermes/.env` as `GITHUB_TOKEN=...` (the
+github-auth skill reads it from there). Note: a token that works for API read
 may still lack push on the target repo — the `/repos/<owner>/<repo>`
 permissions check is the only reliable gate.
 
-## Manual repo sync without rsync (PITFALL)
+## Manual repo sync when rsync is unavailable (PITFALL)
 
-When the target host lacks `rsync`, a Python mirror script must be careful:
+The rsync form of the same preserve-set rule (plus the post-sync `git status`
+gate) lives in `audit-and-release.md` → "Sync source into a clone — never let
+cleanup delete .git"; use it whenever rsync exists. Fallback for hosts without
+`rsync`, where a Python mirror script must be careful:
 
 - **Copy phase**: walk source, copy every file (overwrite) into the clone.
 - **Cleanup phase**: for top-level entries in the clone, delete only files that
@@ -92,11 +94,46 @@ settings.lua, authors.txt, LICENSE, thumbnail.png, ROADMAP.md) → commit with
 Note: ROADMAP.md IS committed to the repo (it always has been) but is EXCLUDED
 from the portal zip — different artifacts, different rules.
 
+## Keep the clone or delete it?
+
+- Token embedded in the clone's `.git/config` (the script pattern above) →
+  **delete the clone once the push is verified**; that is the only reason that
+  pattern wipes it.
+- Push through the `gh` CLI / credential helper → no secret is stored in the
+  clone, so **KEEP it** as the standing sync dir (sits beside the source as
+  `github-sync/`): the next release is one `rsync` + `git add -A` + commit instead
+  of clone + wipe + copy.
+- Never embed a token in a clone you intend to keep.
+
+## Commit message lives OUTSIDE the working tree
+
+Write the message into the scratch dir (`~/.hermes/cache/scratch/…`) and pass it
+with `git commit -F`. A message file written inside the clone gets swept up by
+`git add -A` and ships in the commit — move it out before staging if it was
+written there.
+
+## Post-push: read the CONTENT back, not just the ref
+
+`git ls-remote` / a clean `git push` exit 0 only proves the ref moved — it says
+nothing about what is ON `main`. The DMR repo is public, so the receipt needs no
+auth:
+
+```bash
+gh api repos/<owner>/<repo>/commits/main --jq '.sha[0:7] + "  " + .commit.message[0:70]'
+gh api repos/<owner>/<repo>/contents/info.json --jq '.content' | base64 -d   # version + factorio_version
+gh api repos/<owner>/<repo>/contents/changelog.txt --jq '.content' | base64 -d | head -3
+gh api repos/<owner>/<repo>/git/trees/main?recursive=1 --jq '[.tree[]|select(.type=="blob")]|length'
+```
+
+Assert the commit subject, the `info.json` version, the top `Version:` block of
+the changelog, and the blob count against what you intended to publish. Local
+`git status` proves nothing about the remote — the API response is the receipt.
+
 ## Mod portal credentials are separate from GitHub (v4.2.0)
 
 Uploading to mods.factorio.com requires `FACTORIO_PORTAL_USER` +
-`FACTORIO_PORTAL_TOKEN` (profile → upload token). They were NOT in the env
-file; the session ended with everything else done and the user doing the final upload
+`FACTORIO_PORTAL_TOKEN` (profile → upload token). They were NOT in `.env`; the
+session ended with everything else done and the user doing the final upload
 manually with the prepared zip. If you hit missing portal creds: prepare the zip
 fully (parity-checked, privacy CLEAN, accumulated changelog), then hand the user
 the absolute path — don't block or improvise auth.

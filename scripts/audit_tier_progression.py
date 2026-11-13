@@ -19,7 +19,8 @@ import re
 import sys
 from collections import Counter, defaultdict
 
-DUMP_PATH = sys.argv[1] if len(sys.argv) > 1 else 'dumps/data-raw-dump.json'
+DUMP_PATH = sys.argv[1] if len(sys.argv) > 1 else (
+    '~/projects/Factorio-Modding/dark-matter-replicator/dumps/data-raw-dump.json')
 
 dump = json.load(open(DUMP_PATH))
 recipes = dump.get('recipe', {})

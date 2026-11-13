@@ -1,6 +1,6 @@
 # DMR v4.2.0 — Deep dump audit findings (2026-08-22, 138-mod modlist)
 
-Full reports live on disk: `<project>/research/v42-audit/`
+Full reports live on disk: `~/projects/Factorio-Modding/dark-matter-replicator/research/v42-audit/`
 (CONSOLIDADO.md + ores.md + baseline.md + techs.md + planets.md + costos.md +
 distribucion.md + exclusiones.md + refiner.md + cost-model.md). Load this ref
 BEFORE resuming the v4.2/v4.3 balance work so the pending decisions and the

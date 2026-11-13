@@ -4,7 +4,7 @@
 >
 > **Why**: The "3-pass audit methodology" in `factorio-modding` SKILL.md focuses on `category→categories` migration. It does NOT catch cost-solver internal bugs. These pitfalls extend the audit surface for any mod with a recursive cost solver.
 >
-> **Source**: SDD Think audit of `dark-matter-replicators-reborn_3` (DMR v3.5.0 → v3.5.1) on 2026-08-09. Full report at `<project>/specs/`.
+> **Source**: SDD Think audit of `dark-matter-replicators-reborn_3` (DMR v3.5.0 → v3.5.1) on 2026-08-09. Full report at `~/projects/Factorio-Modding/dark-matter-replicator/dark-matter-replicators-reborn_3/specs/`.
 
 ---
 
@@ -190,8 +190,37 @@ Before publishing any mod with a recursive cost solver, run this checklist:
 8. **Recursion depth** — is there a hard cap on recursion depth (e.g. 20 levels) to prevent stack overflow with deep mod chains?
 9. **Hard cap on final cost** — is there a `if cost > MAX then cost = MAX` safety net? (DMR uses 600s.)
 10. **Tier cap at ingredient + 1** — does the tech tier cap prevent "blue bottle in T5" with Bob's/Angel's?
+11. **Self-referential bill** — does any price/cost floor compute from a bill that can contain the item itself (C7)?
 
 A clean run on all 10 means the mod should not regress on common mod interactions.
+
+---
+
+---
+
+## Pitfall C7: a price derived from the item's own bill is a runaway, and the ceiling deletes the item
+
+**Symptom**: a feature meant to make an item obtainable never ships. The recipe is generated, then a
+later "ceiling" filter removes it and reports it as over the limit (e.g. 3695-15612 s against a
+3600 s cap). The gate that decides eligibility looks correct in isolation.
+
+**Root cause**: the clamp that floors a recipe's price from its ingredient bill also sees the item's
+OWN bill. When the bill can contain the item itself (a machine that replicates itself, an assembler
+whose bill lists itself, an item priced by what its recycler hands back), the fixpoint is not a floor
+— it compounds: price feeds bill, bill feeds price, until the value exceeds the ceiling and the
+ceiling removes it. TWO independent passes do this; fixing one still leaves the item deleted.
+
+**Fix**: exclude the item class from the bill-based clamp at the source (a source-set that no longer
+contains the self-referential source, or a `is_self_replicable(name)` guard inside the loop). Do NOT
+raise the ceiling — that also admits genuinely overpriced items and hides the next runaway.
+
+**Verify on the engine, not the source** (data-stage probe mod, see
+`references/headless-engine-gate.md`): count the shipped recipes and print each new recipe's
+`energy_required`. A count delta (249 → 254) plus five sane per-tier times is the verdict; a source
+diff that removes one guard cannot prove two other passes stopped deleting the item.
+
+**Generalizes to**: any dynamic generator where a price/cost/tier is computed from a bill that can
+contain the item itself — self-replicating machines, recycling loops, byproduct-priced intermediates.
 
 ---
 

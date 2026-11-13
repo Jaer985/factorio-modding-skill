@@ -16,10 +16,13 @@
 
 _Historical design (kept for reference — assumptions below may be stale):_
 
-_State: lua5.1 INSTALLED and verified (`sudo apt-get install -y lua5.1` →
-`/usr/bin/lua5.1`). Harness design agreed with user (route = "vamos con #6").
-Tests NOT yet written — this reference preserves the design so the next
-session can write `run_tests.lua` without re-deriving it._
+_State: lua5.1 was the first attempt; the suite finally needs **5.2** (goto).
+**Windows laptop (current, 2026-10-31): real Lua 5.2.4 at
+`%LOCALAPPDATA%\hermes\tools\lua52\`, linked into `%LOCALAPPDATA%\hermes\bin\`
+(already on PATH) — `cd dmr-tests && lua52 run_tests.lua` → 54 passed, 0 failed.**
+winget only ships `DEVCOM.Lua` 5.4.6, so the binary came from LuaBinaries
+(`luabinaries 5.2.4 Win64`); 5.4 is NOT a substitute (the harness mirrors
+Factorio's embedded runtime). Debian: `sudo apt-get install -y lua5.2`._
 
 ## Why this exists
 

@@ -19,16 +19,36 @@ options — bring harder trade-off analysis.
 - Placeholder graphics: vanilla assembler sprites with violet/black-obsidian
   tint. Lore EN/ES explaining why only replicables.
 
-## Final numbers (user-approved)
+## Final numbers (SHIPPED design, v4.7.1)
 
-| Step | Success | Retry (same item) | Loss |
-|---|---|---|---|
-| → uncommon | 1% (0.01) | 0.94 | 5% |
-| → rare | 0.5% (0.005) | 0.945 | 5% |
-| → epic | 0.25% (0.0025) | 0.9475 | 5% |
-| → legendary | 0.1% (0.001) | 0.949 | 5% |
+| Step | Success | Loss per attempt |
+|---|---|---|
+| → uncommon | 5% | 1% |
+| → rare | 2.5% | 1% |
+| → epic | 1.25% | 1% |
+| → legendary | 1% | 1% |
 
-Energy per cycle = 10 × the replication recipe's `energy_required`.
+The v4.1 proposal (1 %/0.5 %/0.25 %/0.1 % with 5 % loss and energy = 10×
+the replication cost) was superseded: pacing now comes from the per-tier
+ cycle time instead of tiny odds — `lib/refiner-logic.cycle_seconds` returns
+1 s for a tier-1 item up to 5 s for a tier-5 item, so a normal → legendary
+chain averages ~240 attempts. The entity draws a flat **1 MW** and is a
+normal `assembling-machine` (visible recipe + progress bar), not the
+container detour of 4.7.0. The odds live in the recipes (products with
+`independent_probability`), the pacing in the recipe's `energy_required`.
+
+**How the ladder stays automatic (user requirement: pick the recipe once,
+nothing else)**: `control.lua` runs `sync_recipe` on `on_built_entity` /
+`on_configuration_changed` / `on_nth_tick`; it reads the machine's current
+input inventory, decides the next step for that item's quality, and calls
+`entity.set_recipe(...)` when the recipe no longer matches. The script never
+moves items — that is the hole: an `assembling-machine` cannot consume its own
+output, so the upgraded item stays in the output and the machine idles as soon as
+the input holds nothing the new recipe accepts (and the recipe change empties the
+input). "Pick the recipe once, nothing else" needs an explicit output→input
+transfer in the script, or an inserter loop — see Corrections below.
+Runtime pitfall: read `prototypes.recipe[name].energy` (NOT
+`energy_required` — see `references/factorio-2.1-breaking-changes.md`).
 
 ## Critical technical facts learned
 
@@ -42,14 +62,29 @@ Energy per cycle = 10 × the replication recipe's `energy_required`.
    'independent_probability'". Use `independent_probability` for independent
    per-result chances (pumpjack-style); `probability` now means
    cumulative/summed. Fix the generator AND the test assert together. There is
-   NO runtime code needed; probabilities that don't sum to 1 = the rest is NO
-   OUTPUT (the 5% loss).
+   NO runtime code needed. **Correction:** probabilities that don't sum to 1 do
+   NOT mean "the rest is no output" — with `independent_probability` each product
+   rolls on its own, so one craft can yield both or neither. See the Corrections
+   section below; getting this wrong ships free-item duplication.
 
-2. **Recipe `ingredients` accept a `quality` field** — `{type="item",
-   name=X, amount=1, quality="uncommon"}` restricts the input to that quality,
-   which is what makes the ladder not-skippable. One recipe per (item, step)
-   is required (4 per replicable item, ~3200 total with Bob's — the engine
-   handles it, same as the vanilla recycler's thousands of recycling recipes).
+2. **CORRECTED — `ingredients[].quality` does NOT restrict the input** (this
+   reference said so for a year and it is wrong on 2.1; the design was built
+   on it and shipped broken). The filter the engine applies is
+   **`quality_min` / `quality_max` on the recipe**, taking a quality NAME
+   ("uncommon"), not a level index. One recipe per (item, step) is still
+   required (4 per replicable item, ~3200 total with Bob's — the engine
+   handles it, same as the vanilla recycler's thousands of recycling
+   recipes). Full rule + the engine proof in
+   `references/factorio-2.1-breaking-changes.md` → "Recipe input quality
+   gate".
+
+2b. **The machine must run a recipe that names the item as an ingredient** —
+   a crafting machine's input inventory is derived from the selected recipe
+   and has no free slots, so an ingredient-less recipe yields 0 slots and
+   `can_insert = false` for everything (the 4.6.x "just give it slots"
+   attempt measured 0 slots / insert 0 even with
+   `ingredient_inventory_size = 10`). The refiner therefore keeps a real
+   recipe and a script repoints it at the right step.
 
 3. **Quality variants are NOT accessible in the data stage.** Factorio expands
    quality AFTER all mod data stages: `data-raw-dump.json` shows 0 items with
@@ -82,6 +117,36 @@ Energy per cycle = 10 × the replication recipe's `energy_required`.
    `allowed_effects = { "consumption" }` on the refiner. Quality modules
    would multiply the fixed result probabilities (breaking the ladder) and
    productivity would double the retry outputs.
+
+## Corrections — recipe probabilities and the "automatic" ladder
+
+- **Two `independent_probability` products are not a three-way split.** With
+  `retry = 1 - loss - p` on the keep product and `p` on the upgrade product the
+  real per-cycle distribution is `keep-only = (1-p)*retry`, `upgrade-only =
+  p*(1-retry)`, `both = p*retry`, `nothing = (1-p)*(1-retry)`. At the shipped
+  0.94/0.05 that is 89.3 % / 3 % / **4.7 % free duplicate** / **5.7 % destroyed**
+  — the "1 % loss" in the header above is off by 5.7x and one craft in 21 mints
+  an extra item. Mutually exclusive outcomes need `shared_probability` ranges
+  (one roll, non-overlapping: keep `[0, 1-loss)`, upgrade `[0, p)`, nothing =
+  uncovered tail) — or a single product with `extra_count_fraction` for the
+  fractional copy. Assert the joint distribution in `dmr-tests`, not the two
+  numbers separately: both asserting 0.94 and 0.05 pass while the mechanic is wrong.
+- **`entity.set_recipe()` empties the machine's input inventory** (measured by the
+  author and recorded in the 4.8.0 changelog notes). A one-recipe-per-step design
+  that repoints the recipe therefore deletes every input stack that does not match
+  the new ingredient: with mixed qualities in the input, the stacks that no longer
+  fit vanish. Repoint only when the input is empty or holds a single quality.
+- **An `assembling-machine` cannot consume its own output.** `sync_recipe` reading
+  `crafter_output` to choose the next step is a read, not a transfer. Without an
+  inserter loop back to the input the ladder stops at the first success and the
+  item waits in the output. A script that claims "pick once, nothing else" must
+  move output→input itself; prove the claim with `grep -rn crafter_output` before
+  repeating it in a changelog, a portal reply or a design note.
+- **Triaging a "refiner does nothing" report**: derive the expectation from the
+  shipped odds first (20 / 40 / 80 / 100 expected cycles per step, ~240 for the
+  full ladder) and ask for the cycle count, not the impression. Then check the
+  three code paths above in this order: probability exclusivity, recipe-flip data
+  loss, and whether anything moves the output back into the input.
 
 ## Files
 

@@ -49,20 +49,20 @@ grep -i "Darkstar\|OmniMatter\|scenario.*no.*ores" changelog.txt
 
 ## Resolution
 
-1. **Borrar el `roadmap.txt` heredado** (user said: "borralo directamente")
-2. **Crear `ROADMAP.md` nuevo** based on:
-   - `changelog.txt` history (qué se acaba de cerrar)
-   - `info.json` (versión y factorio_version actuales)
-   - Code state real (grep por features mencionadas, ej. `dmrsa-use-machine-efficiency` en settings.lua)
-   - Issues conocidos en runtime (lo que el user reporta en juego)
-3. **Estructura del nuevo ROADMAP.md**:
-   - ✅ Cerrado recientemente (últimos 3-4 changelog blocks)
-   - 🔴 Patch series próximo (v3.5.2, v3.5.3)
-   - 🟡 v3.6.0 (features QoL)
-   - 🟢 v3.7.0+ (features mayores)
-   - 🔧 Backlog técnico
-   - 📋 Procedimiento de release
-   - 🎯 Prioridad inmediata (esta semana)
+1. **Delete the inherited `roadmap.txt`** (user said: "borralo directamente")
+2. **Create a new `ROADMAP.md`** based on:
+   - `changelog.txt` history (what was just closed)
+   - `info.json` (current version and factorio_version)
+   - Actual code state (grep for mentioned features, e.g. `dmrsa-use-machine-efficiency` in settings.lua)
+   - Known runtime issues (what the user reports in-game)
+3. **Structure of the new ROADMAP.md**:
+   - ✅ Recently closed (last 3-4 changelog blocks)
+   - 🔴 Next patch series (v3.5.2, v3.5.3)
+   - 🟡 v3.6.0 (QoL features)
+   - 🟢 v3.7.0+ (major features)
+   - 🔧 Technical backlog
+   - 📋 Release procedure
+   - 🎯 Immediate priority (this week)
 
 ## Key takeaway for future sessions
 

@@ -96,3 +96,29 @@ The original had device2-5 for crafted items of increasing complexity. Since we 
 - [ ] `locale/` — add device2-5 and military entries
 - [ ] `data.lua` — item-subgroups per category (from original repltypes-data.lua)
 - [ ] `settings.lua` — optional: enable/disable per category
+
+## Classifier implementation rules (v4.5.1)
+
+The heuristics above are right; the code drifted from them by adding conditions that
+sounded safer. Each one produced a wrong picker row:
+
+- **An ITEM prototype has no `minable` field** — mining lives on the RESOURCE prototype.
+  `proto.minable and (...)` as an ore test therefore excludes every ore, and they fall to
+  `intermediates`. Detect ores from `subgroup == "ore" / "raw-resource"` or the name.
+- **"Never crafted" cannot detect ores under Space Age**: asteroid crushing emits
+  `iron-ore`, `copper-ore` and `coal`, so every ore passes an `is_crafted()` test and gets
+  demoted. Eligibility checks and category checks must not share one predicate.
+- **Probe `subgroup`, not `categories`**, when the question is "which picker row is this
+  in". `categories` = which MACHINE may craft it (the machine gate); `subgroup` = how the
+  crafting UI groups it. A histogram of the first looks like a taxonomy answer and is not.
+- **Planet items keep their category subgroup**: the planet gate comes from the machine
+  category, so forcing them onto a "resources" row only throws the sort away.
+- **The mod's own `dmrsa-*` items classify by kind, not by prefix**: the replicators are
+  machines; the rest of the family (tenemut, scoop, transducer, conduit, dark matter) is
+  the material row. A prefix test files the replicators under materials.
+- **Detection order is a design decision, state the winner**: fuel is tested before
+  organic, so SA crops (`yumako-seed`, wood) land in Fuels by fuel value. Both readings are
+  true of the item; pick one deliberately.
+- **A classifier runs once per target over every recipe** — an unindexed scan is
+  O(items × recipes) and dominates the data stage once a modpack is loaded. Build the
+  `crafted` / `smelted` sets once and look them up.

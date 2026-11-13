@@ -17,7 +17,7 @@ OUT_DIR = sys.argv[2] if len(sys.argv) > 2 else "."
 COOKIE = os.environ.get("FACTORIO_MOD_PORTAL_COOKIE")
 if not COOKIE:
     print("Error: FACTORIO_MOD_PORTAL_COOKIE not set.", file=sys.stderr)
-    print("Source it: source <profile-secrets>/factorio-cookie-session.sh", file=sys.stderr)
+    print("Source it: source ~/.hermes/secrets/factorio-cookie-session.sh", file=sys.stderr)
     sys.exit(1)
 
 # Get latest release

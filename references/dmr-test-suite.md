@@ -1,12 +1,12 @@
 # DMR cost-solver test suite
 
-Location: `dmr-tests/` in the project directory
+Location: `~/projects/Factorio-Modding/dark-matter-replicator/dmr-tests/`
 (outside the mod source dir so it never gets packaged into the zip).
 
 ## Run
 
 ```bash
-cd <project>/dmr-tests
+cd ~/projects/Factorio-Modding/dark-matter-replicator/dmr-tests
 lua5.2 run_tests.lua          # quiet
 lua5.2 run_tests.lua verbose  # shows per-test + helper debug output
 # Full suite (the 6 files, run all before any rebuild):

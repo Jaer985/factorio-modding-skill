@@ -9,14 +9,14 @@ see (proven: 118 missing prereqs + 367 under-tiered items with Bob's).
 ## 1. Get the dump (user side, Windows)
 
 - Close Factorio. Open `cmd`, cd to the game's `bin\x64`:
-  `cd "<game-install-dir>\bin\x64"`
+  `cd "C:\Program Files (x86)\Steam\steamapps\common\Factorio\bin\x64"`
 - Run: `factorio.exe --dump-data`
 - Output: ONE file in the write dir:
   `C:\Users\<USER>\AppData\Roaming\Factorio\script-output\data-raw-dump.json`
   (Factorio 2.x writes a single JSON, NOT a folder of per-type files; Windows
   Explorer hides the .json extension so it shows as bare `data-raw-dump`).
 - ~90MB with Bob's — too big for Telegram (20MB cap). Transfer via SCP:
-  `scp data-raw-dump.json <user>@<host>:<project-dumps-dir>/`
+  `scp data-raw-dump.json jaer@<host>:~/projects/Factorio-Modding/dark-matter-replicator/dumps/`
   or 7-Zip first (JSON compresses ~10-20%).
 - ALSO grab `%APPDATA%\Factorio\factorio-current.log` — DMR's `helpers.info`
   lines are a live trace of what the generator decided per item

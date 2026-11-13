@@ -28,7 +28,7 @@ transducer/atomic-loom, conduit/nanophase-conduit, + new genesis-loom) with a co
   I can only provide text responses."
 - Conclusion: for DMR icon art, do NOT try opencode-go. Use Google or OpenRouter below.
 
-## Verified providers with working keys (in the local profile env file)
+## Verified providers with working keys (in ~/.hermes/.env)
 ### Google AI Studio (`GOOGLE_API_KEY`)
 - Key valid: `generativelanguage.googleapis.com/v1beta/models?key=...` returns 50 models.
 - Image models exist: `gemini-2.5-flash-image`, `gemini-3-pro-image`,
@@ -137,7 +137,7 @@ User: "gemini siempre me da iconos que no concuerdan con lo que tenemos" — a t
 prompt alone is NOT enough context. The fix that landed: build a **reference PDF
 with the CURRENT icons embedded + lore + palette** so the image model sees the
 existing art before generating. Delivered as
-`dmr-icon-reference.pdf` in the project directory
+`~/projects/Factorio-Modding/dark-matter-replicator/dmr-icon-reference.pdf`
 (3 pages, 18 embedded images: the 4 current material icons + replicator-5 as
 genesis-loom reference + all 9 tech borders + machine icons).
 
@@ -161,8 +161,8 @@ explicit design goal ("it is MINED, not crafted" for tenemut). Ask the model to
 match the family (same palette + lighting across all 5). Script was one-off in
 /tmp; if regenerating, keep the same structure — it was verified via pypdf
 (page count + embedded image count per page).
-Also 2026-08-13: delegated the "free image generation path" research via the
-internal kanban tracker (`kanban create ... --assignee agent`) —
+Also 2026-08-13: delegated the "free image generation path" research to the
+coder profile via kanban (`hermes kanban create ... --assignee coder`) —
 opencode-go/Google/OpenRouter were all verified non-free or blocked (see above);
 the kanban task is the open thread for a no-billing route (Pollinations, Stable
 Horde, local ComfyUI on the weak Quadro P620 4GB, etc.).

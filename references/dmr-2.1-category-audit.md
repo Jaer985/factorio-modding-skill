@@ -2,7 +2,7 @@
 
 Audit date: 2026-07-18
 Mod: Dark Matter Replicators Reborn v3.3.6 → 3.4.0
-Auditor: skill maintainer
+Auditor: Kai (game-dev)
 
 ## Goal
 

@@ -147,10 +147,14 @@ import re
 
 def parse_locale(path):
     sections, current = {}, None
-    for line in open(path).read().split('\n'):
-        m = re.match(r'^([\w-]+)$', line)
+    for line in open(path, encoding='utf-8-sig').read().split('\n'):
+        line = line.rstrip('\r')                     # CRLF files: strip the CR or every key gains one
+        s = line.strip()
+        if s.startswith('#') or s.startswith(';'):   # BOTH comment chars — a commented-out key is not
+            continue                                 # shipped, and would fake a one-sided entry
+        m = re.match(r'^([\w-]+)$', s)
         if m: current = m.group(1); sections[current] = {}
-        elif current and '=' in line and not line.strip().startswith(';'):
+        elif current and '=' in line:
             k, _, v = line.partition('=')
             sections[current][k.strip()] = v.strip()
     return sections
@@ -160,6 +164,10 @@ es = parse_locale('locale/es-ES/x.cfg')
 for sec in ['item-name', 'technology-name', 'mod-setting-description', ...]:
     diff = set(en.get(sec, {})).symmetric_difference(set(es.get(sec, {})))
     if diff: print(f"{sec}: {len(diff)} asymmetric keys: {sorted(diff)[:5]}")
+    # untranslated: same non-trivial value in both locales (allow proper nouns)
+    same = [k for k in set(en.get(sec, {})) & set(es.get(sec, {}))
+            if en[sec][k] == es[sec][k] and len(en[sec][k]) > 6]
+    if same: print(f"{sec}: {len(same)} likely untranslated: {sorted(same)[:5]}")
 ```
 
 If a section reports asymmetric keys, the keys present in only one locale are the bugs
@@ -390,6 +398,25 @@ the vars; do not guess. Two-step flow:
 If creds are missing, STOP after preparing everything else (zip verified,
 privacy CLEAN, changelog accumulated) and hand the user the exact zip path for a
 manual upload — don't block the release on credentials you can't obtain.
+
+**Publication lag (observed, don't fight it)**: `finish_upload` returning `{"success":true}` does
+NOT mean the release is public. The public list can keep serving the previous `releases[-1]` for
+minutes afterwards. Two rules follow:
+
+- Re-running the upload "to check" comes back HTTP 400
+  `{"error":"InvalidModRelease","message":"Release with that version already exists."}` — that
+  error is CONFIRMATION the release was recorded server-side, not a failure. Do not retry, and never
+  bump the version to get around it: a retry cannot succeed, and a bump publishes a phantom version
+  that the real fix then collides with.
+- "Published" means the API lists it: poll `GET /api/mods/<name>` until `releases[-1].version` equals
+  the new version (also checks `/api/mods/<name>/full`, same store). Until then treat it as
+  accepted-but-unpublished: no announcement, no "publicado" claim to the user — they test what the
+  portal serves, and the release-identity rule above says the portal is the source of truth.
+
+The one-shot wrapper actually used for releases is
+`python3 ~/.hermes/scripts/dmr-portal-upload.py <zip> <mod-name>`; it prints both HTTP steps, so the
+response body (including any error JSON) is always visible — read it instead of assuming success
+from exit code 0.
 
 ## Accumulated changelog header for multi-version portal jumps
 
@@ -740,7 +767,10 @@ a mod-defined subgroup or recipe category):
 | `type = "item-group", name = gprefix .. "X"` | `[item-group-name]`<br>`gprefix .. "X" = <displayed name>` |
 
 The locale audit methodology above (parse + cross-reference) catches these
-automatically. If you skipped that audit because the mod "looked fine in static
+automatically. **Hidden prototypes count too**: a `recipe`/`technology` marked `hidden` still renders
+its name in the machine's progress tooltip and the crafting queue, so `recipe-name.<key>` /
+`technology-name.<key>` is mandatory in BOTH locales — "nobody can see it" is the wrong assumption,
+and the player gets a literal `Unknown key: recipe-name.<key>` in-game. If you skipped that audit because the mod "looked fine in static
 review", you missed these.
 
 ## "Enumerate → fix all → verify once" generalizes beyond `"?"`
@@ -1157,13 +1187,12 @@ fine yet only have `pull` access — you do all the commit prep, then hit
 Check BEFORE doing any work:
 
 ```bash
-# Load the GitHub token from the profile env file — see the privacy-scan section
-TOKEN=$(grep -iE '^[a-z_]*token[a-z_]*=' "$PROFILE_ENV_FILE" | head -1 | cut -d= -f2-)
+export GITHUB_TOKEN=...   # stored in ~/.hermes/.env as GITHUB_TOKEN=...
 # 1. Who is this token? login must match the repo owner (or a collaborator
 #    with Write role)
-curl -s -H "Authorization: Bearer $TOKEN" https://api.github.com/user
+curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/user
 # 2. What can it do on the target repo? permissions.push must be true
-curl -s -H "Authorization: Bearer $TOKEN" \
+curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
   "https://api.github.com/repos/<owner>/<repo>"
 ```
 
@@ -1171,15 +1200,15 @@ If `login` != owner and `permissions.push` is false, stop and ask the user
 for the right token (their main account PAT with `repo` scope) or to add the
 token's account as a collaborator with Write role. Don't burn a cycle staging
 a commit you cannot push. Real case: DMR 3.6.0 push prepared fully, then 403 —
-token was `<service-account>-glitch` (pull-only) against `Jaer985/...`.
+token was `servicesjmtech-glitch` (pull-only) against `Jaer985/...`.
 
 ## Pre-push private-data scan (user asked: "verifica que no se suba nada privado")
 
 Before `git push`, scan the staged tree for secrets and private paths — a
 release repo is public. Reusable checker:
 `scripts/check-no-private-data.py` (under this skill). It walks a path and
-flags: token patterns (`github_pat_`, `ghp_`, and related `gh*_` credential
-forms), private paths (any absolute `$HOME` path), account names, secret file
+flags: token patterns (`github_pat_`, `ghp_`, `GITHUB_TOKEN`,
+`GITHUB_PERSONAL`), private paths (`~`), account names, secret file
 names (`.env`, `.pem`, `.key`, `.DS_Store`, `Thumbs.db`), and any `.cfg`
 outside `locale/`. Run it on BOTH the git tree and the built zip before
 publishing. Also confirm internal dev dirs (`research/`, `specs/` — audits,
@@ -1188,16 +1217,35 @@ mod.
 
 ## Sync source into a clone — never let cleanup delete .git (v3.6.0)
 
-When preparing a release push by copying the mod source tree into a fresh
-clone, custom Python/os.walk "mirror sync" scripts are dangerous: a buggy
-cleanup branch can delete top-level files — including `.git` — leaving a
-non-repo that fails `git status`. After ANY file-sync/cleanup step, verify
-the clone is still a repo (`git status`) before committing. Prefer copying
-the source over the destination with an explicit preserve-list for files that
-exist only in the repo (LICENSE, thumbnail.png), and never run delete-logic
-that doesn't special-case `.git`. If `.git` is gone, re-init (`git init -b
-main`), re-add origin, re-stage — do not try to resurrect the old history
-mid-sync.
+When preparing a release push by syncing the mod source tree into a standing
+clone, the cleanup pass must be blind to `.git`:
+
+- **rsync (preferred when the target has it):**
+  ```bash
+  rsync -a --delete --exclude '.git/' --exclude 'research/' --exclude 'specs/' \
+        --exclude 'bin/' "$SRC"/ "$CLONE"/
+  ```
+  `--delete` removes anything in the clone missing from the source — **including
+  `.git`** — and excluded paths are the ONLY thing the delete pass skips (unless
+  `--delete-excluded` is given). So `--exclude '.git/'` IS the preserve set, not
+  a speed option; omitting it silently turns the push target into a non-repo
+  (`fatal: not a git repository`) and drops the local history.
+- **Manual Python/os.walk mirror (no rsync):** a buggy cleanup branch can delete
+  top-level files — including `.git` — leaving a non-repo that fails `git status`.
+  Prefer copying the source over the destination with an explicit preserve-list
+  for files that exist only in the repo (LICENSE, thumbnail.png), and never run
+  delete-logic that doesn't special-case `.git`.
+
+**Gate after EVERY sync, either form**: `git status` inside the clone must work
+AND the key files must exist (`info.json`, `changelog.txt`, `data.lua`,
+`settings.lua`, `authors.txt`, `FAQ.md`). A failing `git status` means the
+preserve set was too small — fix the exclude/preserve list and re-sync; commit
+only after the gate passes.
+
+**If `.git` is gone**: re-clone the remote and re-sync — the history is safe on
+GitHub, so re-downloading is lossless and takes a minute. Re-init (`git init -b
+main` + re-add origin) discards the local history; reserve it for commits that
+exist nowhere else.
 
 ## Check mod portal discussions when the user reports weirdness (v3.5.11)
 
@@ -1655,3 +1703,147 @@ research-pack selection (`elseif tier == 3 then ... transducer ... elseif tier
 in {4,5} then ... conduit ...`) and the tier computation feeding it. If a
 name-based override exists but only raises the tier, that's the bug.
 
+
+
+## Release-identity three-way match, single-source builder, changelog lint (pre-upload)
+
+Version drift is a *release blocker*, not a paperwork issue — each of these ships something wrong
+or gets the upload rejected:
+
+1. **Three-way match before building**: `info.json` `version` == top `changelog.txt` `Version:` block
+   == version in the zip filename. All three are written by hand and drift independently; a tree full
+   of NEW code carrying the LAST published number is a duplicate-version reject on the portal (or a
+   silent re-upload that breaks the changelog contract for everyone who already has that version).
+   The portal API (`/api/mods/<name>` → `releases[-1].version`) is the source of truth for what is
+   already published, not the local changelog.
+2. **The builder must read the version from `info.json`** — never hardcode `OUT=..._<ver>.zip` plus a
+   list of assertions for the old version's strings. A hardcoded builder cannot produce the next
+   version, and its failing assertions invite hand-edits that skip newly added files.
+3. **Assert the built zip contains every file any module requires — from the ZIP, not the tree.**
+   `safe_require`/`pcall` degrades a missing module into a log line, so a mis-built zip loads "fine"
+   with the whole new feature silently absent and the gate still exits 0. Checking only `data.lua`'s
+   own requires is NOT enough: the requires that bite are transitive (`lib/init.lua`,
+   `prototypes/entities/*` reaching into `lib/`). Build the require GRAPH — regex
+   `(?:safe_require|require)\s*\(\s*"([^"]+)"\s*\)` over EVERY `.lua` inside the zip — and assert
+   every **mod-internal** edge resolves to a file in `zip.namelist()`. Skip vanilla edges:
+   `__base__/`-`__core__/` prefixed paths and bare lualib names (`util`, `resource-autoplace`) that
+   the engine resolves from core/base. Then run the engine gate against the extracted ZIP's bytes,
+   never the source tree — the zip is what ships.
+4. **Changelog lint the in-game parser enforces** (the portal accepts the file as plain text, so
+   violations ship broken and silent): every `-----` separator must be followed by a `Version:` line;
+   category headers are the known two-space-indented forms (a bare `NOTE:` or odd indent creates an
+   orphan block that re-parents the entries below it); no trailing whitespace. The WHOLE file ships,
+   so lint every historical version block too, not just the one you added. Run the lint before
+   upload, not after a player reports it.
+5. **After publishing, sync the announcement channels**: `python3 ~/.hermes/scripts/dmr-release-announce.py --check`
+   compares the portal API against the Discord announcement post (exit 1 = stale or missing; `--fix`
+   updates the post in place). Make it a checklist step so the announcement never lags the release
+   again.
+6. **Run the gate at least once with `--check-unused-prototype-data`** (on the zipped build): it
+   surfaces recipes bound to a category that no longer exists, orphaned prototypes and lost
+   references that a normal `--dump-data` load only warns about — or accepts silently.
+7. **Every number you publish comes from the dump of the shipped zip, not from memory or the dev
+   tree.** Changelog claims, portal description and FAQ promises (machine draws, cycle times,
+   research costs, multiplier totals) are verified by querying `data-raw-dump.json` for the exact
+   prototype. A balance fix lands, the claim written before it survives in the prose, and the portal
+   then contradicts the game.
+8. **Project docs must not carry release state** — "built but not uploaded", "current version:
+   X.Y.Z", "1,120 downloads" go wrong the moment you publish. Any fact that the portal knows
+   (version, download count, what shipped) is fetched from `/api/mods/<name>` at need, and docs say
+   WHERE to get it instead of freezing a snapshot. A doc that claims a release is un-uploaded after
+   it went live is worse than no doc: it sends the next session to re-do work already done.
+
+## State review — the roadmap is a claim set, not a fact
+
+When the user asks to review a mod's roadmap / project state ("vamos a revisar el roadmap"),
+the doc is the CLAIM set; the artifacts decide what is true. Order of truth, highest first:
+
+1. **Published** — `curl -s "https://mods.factorio.com/api/mods/<name>"` → `releases[-1]` is what
+   players actually have (`version`, `released_at`, `file_name`) plus `downloads_count`. Public
+   endpoint, no auth, no cookie.
+2. **Shipped bytes** — `unzip -p <zip> <mod-root>/info.json | grep '"version"'` and
+   `unzip -l <zip> | grep -i <feature>`. The zip root is the mod NAME taken from `info.json`, so
+   the inner path carries no version and no working-folder suffix — don't guess a versioned
+   directory name when grepping the archive.
+3. **Source** — `info.json` version vs the FIRST `Version:` block of `changelog.txt` (newest block
+   sits at the top of the file).
+4. **Behaviour** — run the suite (`cd dmr-tests && lua5.2 run_tests.lua`; it lives BESIDE the
+   source dir, not inside it) and read the newest `research/apply-*.md` receipt as a claim to
+   re-run, not as evidence.
+5. **Prose** — `ls -la --time-style=long-iso ROADMAP.md FAQ.md README.md mod-portal-description.md`
+   and compare each mtime against the newest source file. Prose older than the last release has
+   not re-checked its own claims.
+
+Then report: real state first (mark every line as verified this session or not), the backlog split
+into doc debt / needs the user's in-game data / technical debt / parked decisions, and close with
+ONE concrete next action.
+
+Pitfalls:
+- A roadmap's status header ("published X, in development Y, info.json still Z") is a frozen
+  snapshot that goes wrong on the next publish. Verify every clause against the artifact; never
+  quote the header as state. Same rule as "project docs must not carry release state" above.
+- Publishing does not update the prose players read: `info.json`'s one-line description ships
+  inside the zip, while the portal description page is a separate document. Check both — they
+  drift independently, and a shipped feature missing from the page is publish debt no player
+  reports and no gate catches.
+- Release-adjacent docs and the per-version builders (`research/build_*.py`) live in the PROJECT
+  dir, one level ABOVE the source dir. A `ls`/`find` scoped to the source dir reports them missing,
+  which reads as "the docs don't exist" and produces a wrong conclusion.
+- Several repos can carry a `ROADMAP.md`. Pick the one by last-modified + active work, state the
+  assumed target in one line, and proceed: one wrong guess costs a reply, a clarifying round costs
+  a whole turn.
+- `scripts/portal-state-check.py <source-dir>` runs steps 1-3 plus the doc mtimes in one shot and
+  prints a DRIFT line per disagreement. The individual commands above are the verified fallback if
+  the wrapper misbehaves.
+
+## Applying an approved audit batch with parallel subagent chains
+
+When a decision batch is approved, splitting the work across subagent chains is how a large mod gets
+fixed in one pass instead of serial patch-rebuild cycles:
+
+1. **Partition by disjoint files, never by topic.** Each chain owns whole files (economy logic /
+   prototypes+art / locale+docs). Topic partitions on a shared file guarantee merge conflicts and
+   wasted work; disjoint files also let chains run truly in parallel.
+2. **Each chain writes its own receipt file** (`research/apply-<area>.md`): what changed, the
+   before/after numbers, what it tested and with what command, and — critically — anything it was
+   BLOCKED from doing (write-protected paths must be recorded, not worked around; `AGENTS.md` and
+   other guarded files get their intended edit transcribed into the receipt for the author to apply).
+3. **Each chain proves its own slice** (targeted dump query + the test suites it can run). This does
+   NOT prove the combination.
+4. **You verify the MERGED artifact yourself, after all chains land**: run the full test suite and
+   the engine gate against the merged tree, then rebuild and re-gate the zip. Each chain only ever
+   loaded its own snapshot — the merge is a state nobody has tested, and combination bugs (an
+   invariant split across two chains' files, a constant one chain renamed that another still
+   asserts) only surface there.
+4. **Re-read each receipt's numbers against the merged dump** rather than trusting the receipt: a
+   chain reports what it believes it did, and the receipt is a self-report just like a final answer.
+
+## Enabling a gated feature: trace every downstream pass, not just the gate
+
+A feature that a whitelist/gate decides "eligible" ships only if NO later pass deletes the item.
+Each of these bit on the same feature (restoring replicator self-replication after it had been
+disabled for many versions):
+
+- **A whitelist intent is dead code if a name-based veto runs later.** One module decides "is this
+  a target" with an explicit whitelist; a later module vetoes the same items by NAME (own-machine,
+  own-prefix, hidden) before the whitelist is read. Both modules read as correct in isolation, the
+  feature never ships, and no test catches it. Rule: when module A gates on membership and module B
+  has a name/shape veto that runs later, the veto is the real decision — verify by probing the
+  SHIPPED prototype (recipe exists + a sane `energy_required`), never by reading the whitelist.
+  Same class as "an existence guard only sees what loaded BEFORE it".
+- **Every later re-pricing or re-filtering pass can independently delete the item.** Opening the
+  name veto exposed the item to a parts-bill clamp and a recycler-loop re-pricing block, each of
+  which re-priced it (3695-15612 s) and then a ceiling filter removed it. After opening a gate,
+  re-run the count probe until the shipped count stops moving; a single-pass fix is a guess.
+- **`is_burnable` is not a fuel class.** A burnable test accepts sub-MJ materials (a 100 kJ tree
+  seed, a 250 kJ spoilage stack) and then those materials inherit the fuel-class treatment:
+  productivity on their replication recipe, fuel-exclusion from the price fixpoint. Gate a fuel
+  class on a joule threshold (`fuel_value >= 1 MJ`), the smallest legitimate fuel; sub-MJ burnables
+  are materials and must price like materials. Measured: 18 → 16 recipes with `allow_productivity`.
+- **"Tier 1 has too much stuff" is a tier-RULE complaint, not a list complaint.** The tier is
+  `max(pack_tier, chain_tier)` and complexity only scales TIME (capped), so an item's tier is
+  decided by the science pack that unlocks it, not by how deep its recipe chain is. Before
+  proposing per-item moves, MEASURE: count recipes per tier and compute each tier-1 item's chain
+  depth against `data.raw` (the data-stage probe pattern). Deep items in a basic tier prove the
+  rule is wrong, not the list; the fix is a rule change (a complexity floor or a class rule),
+  because a hand list never survives a modlist change.

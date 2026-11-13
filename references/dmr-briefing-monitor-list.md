@@ -14,7 +14,14 @@ Fetch each mod's portal page, extract the current version and `Last updated` dat
 > when you need the full catalog.
 >
 > **In both endpoints, `latest_release` is now `null` for every mod
-> (verified 2026-08-21 across 8 mods).** Always read from `releases[0]`:
+> (verified 2026-08-21 across 8 mods).** ⚠️ **The `releases[]` array on the
+> per-mod flat endpoint is ASCENDING (oldest first) — `releases[0]` is the
+> FIRST release ever, NOT the latest** (verified 2026-10-14: for
+> `dark-matter-replicators-reborn`, `releases[0]` = v3.0.0 (2026-06-06) while
+> the live portal was v4.2.0; for `aai-loaders-sane` it returned v1.0.0 while
+> the live version was 1.0.5 — a silent STALE briefing). **Always take the max
+> by `released_at`**: `rel = max(rels, key=lambda r: r['released_at'])`. Read
+> from there:
 > `rel = (m.get('latest_release') or m['releases'][0])` and pull
 > `version` / `released_at` / `info_json.factorio_version` from there.
 > Reading `latest_release.version` silently returns `?` (a string)
@@ -106,12 +113,12 @@ import urllib.request, json
 url = "https://mods.factorio.com/api/mods/dark-matter-replicators-reborn"
 req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
 m = json.loads(urllib.request.urlopen(req, timeout=15).read())
-rel = m["releases"][0]   # first release is the latest
+rel = max(m["releases"], key=lambda r: r["released_at"])  # NOT releases[0] — array is oldest-first
 print(f"{m['title']} v{rel['version']} released={rel['released_at'][:19]}")
 
 # Per-mod (namelist) — wrapped in results
 m = json.loads(urllib.request.urlopen(req, timeout=15).read())["results"][0]
-rel = m["releases"][0]
+rel = max(m["releases"], key=lambda r: r["released_at"])  # oldest-first array
 ```
 
 **Step 1 — Save the 3 catalog pages** (avoids `curl | python3 -c` security block in cron):
@@ -147,7 +154,8 @@ for slug in ['aai-loaders-sane', 'moon-eneas', 'angelssmelting',
     if not m:
         print(f"  MISS {slug}")
         continue
-    rel = (m.get('latest_release') or (m.get('releases') or [{}])[0])
+    rels = sorted(m.get('releases') or [], key=lambda r: r.get('released_at') or '')
+    rel = (m.get('latest_release') or (rels[-1] if rels else {}))  # array is oldest-first
     print(f"  {slug:24s} v{rel.get('version','?'):10s} "
           f"released={(rel.get('released_at') or '?')[:10]} "
           f"factorio={rel.get('info_json',{}).get('factorio_version','?')} "
@@ -281,5 +289,5 @@ for body in bodies:
   v4.0.0 requires Factorio 2.1 (no 2.0 compat) — confirm on next briefing.
 - **Downloads**: 814 (portal counter, 2026-08-21).
 - **Discussions**: 14 threads (2026-08-21; 13 prior + new "Can't replicate Tenemut?").
-- **Local work in progress** (per maintainer notes, 2026-08-21): v4.1.0 Quality
+- **Local work in progress** (per game-dev memory, 2026-08-21): v4.1.0 Quality
   Refiner in gate test.

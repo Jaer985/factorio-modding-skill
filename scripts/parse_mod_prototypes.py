@@ -23,7 +23,7 @@ bobmining_2.1.0, boblogistics_2.1.1, bobinserters_2.0.3 (2026-08-11).
 """
 import zipfile, re, json, os, sys
 
-MODLIST = "current-modlist"  # set to your local modlist directory
+MODLIST = "~/projects/Factorio-Modding/dark-matter-replicator/current-modlist"
 DEFAULT_TARGETS = ["bobores_2.1.2.zip", "bobmining_2.1.0.zip",
                    "boblogistics_2.1.1.zip", "bobinserters_2.0.3.zip"]
 PATTERNS = ["crushed", "chunk", "processed", "intermediate", "part",

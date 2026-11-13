@@ -1,403 +1,402 @@
-# DMR v4.0 — Mirror Tree (árbol espejo) + Factorio 2.1
+# DMR v4.0 — Mirror Tree + Factorio 2.1
 
-Diseñado e implementado 2026-08-12. Zip `dark-matter-replicators-reborn_4.0.0.zip`
-(108 archivos, 4.7MB) construido, tests verdes (test_mirror 30/30, run_tests
+Designed and implemented 2026-08-12. Zip `dark-matter-replicators-reborn_4.0.0.zip`
+(108 files, 4.7MB) built, tests green (test_mirror 30/30, run_tests
 34/34, step_filter ALL PASS).
 
-## ⚠️ ESTADO ACTUAL 2026-08-13: gate test — 4 errores encontrados y RESUELTOS
-El gate test del usuario en Factorio 2.1.14 pasó por 4 errores de carga, todos
-resueltos en el zip final:
+## ⚠️ CURRENT STATUS 2026-08-13: gate test — 4 errors found and RESOLVED
+The user's gate test in Factorio 2.1.14 passed 4 load errors, all
+resolved in the final zip:
 1. `Error in assignID: item with name 'dmrsa-replication-lab' does not exist` —
-   causa: `assembler2pipepictures()` eliminada como función global en 2.1;
-   `replicators.lua` fallaba SILENCIOSAMENTE (safe_require traga el error) →
-   el item nunca se definía. Fix: `require("__base__/prototypes/entity/
-   assembler-pictures").assembler2pipepictures` (tabla, SIN paréntesis, con
-   prefijo `__base__/` — el require sin prefijo no resuelve desde otro mod).
-   Afectaba a replicators.lua Y planetary-replicators.lua.
+   cause: `assembler2pipepictures()` removed as a global function in 2.1;
+   `replicators.lua` was failing SILENTLY (safe_require swallows the error) →
+   the item was never defined. Fix: `require("__base__/prototypes/entity/
+   assembler-pictures").assembler2pipepictures` (table, NO parentheses, with
+   `__base__/` prefix — the require without prefix does not resolve from another mod).
+   Affected replicators.lua and planetary-replicators.lua.
 2. `Technology dmrsa-mirror-angels-chlorine-processing: Non-contiguous levels:
-   2, followed by 4` — causa: la tech espejo toma la tech ORIGINAL como prereq
-   directo; su science-pack level (2-3) es más superficial que su profundidad
-   real en el árbol (4). Fix: `MirrorGenerator.get_tech_tree_depth()` —
-   función recursiva memoizada y cycle-safe; tier = max(science_level,
-   tree_depth) cuando dmrsa-require-original-tech=ON.
-3. El MISMO error persistía aunque el fix 2 estaba en el zip — causa: faltaban
-   las deps opcionales de Angel's en info.json (`? angelspetrochem` etc.);
-   DMR corría su data-final-fixes ANTES que Angel's → el depth se calculaba
-   con prereqs incompletos. Fix: +12 deps Angel's (mismo patrón A5 que Bob's).
-4. El MISMO error persistía otra vez — causa RAÍZ real: las techs de Angel's
-   son CADENAS NIVELADAS (`angels-chlorine-processing-1..4`). Factorio trata
-   techs con sufijo `-N` como NIVELES de una tech base compuesta; generar un
-   mirror por nivel (`dmrsa-mirror-angels-chlorine-processing-1..4`) creaba
-   una compuesta cuyos niveles deben ser CONTIGUOS — como el nivel -3 no
-   desbloqueaba items replicables (recipes excluidas), su mirror se saltaba y
-   la cadena quedaba 1,2,4 sin el 3. Fix: `normalize_tech_base()` — quitar el
-   sufijo `-N` y agrupar TODA la cadena en UN mirror, con prereq = el nivel
-   más profundo existente (`mirror_deepest`). Pitfall Lua: `string.find(name,
-   "%-%d+$")` NO captura el número (sin paréntesis) — usar `"%-(" .. "%d+" ..
-   ")$"` o el tie-breaker de profundidad es un no-op.
-Lección general: un fix de generación dinámica que lee el grafo de techs de
-OTROS mods (recipe_tech_map, tree depth, prereqs) NO funciona sin las deps
-opcionales de CADA familia overhaul presente en el modlist, y las cadenas de
-techs con sufijo numérico requieren agruparlas en UNA sola tech (ver
-`references/factorio-2.1-breaking-changes.md` secciones Pipe pictures +
+   2, followed by 4` — cause: the mirror tech takes the ORIGINAL tech as a direct
+   prereq; its science-pack level (2-3) is shallower than its real depth
+   in the tree (4). Fix: `MirrorGenerator.get_tech_tree_depth()` —
+   memoized recursive and cycle-safe function; tier = max(science_level,
+   tree_depth) when dmrsa-require-original-tech=ON.
+3. The SAME error persisted even though fix 2 was in the zip — cause: missing
+   optional Angel's deps in info.json (`? angelspetrochem` etc.);
+   DMR ran its data-final-fixes BEFORE Angel's → the depth was calculated
+   with incomplete prereqs. Fix: +12 Angel's deps (same A5 pattern as Bob's).
+4. The SAME error persisted again — ROOT CAUSE: Angel's techs
+   are LEVELED CHAINS (`angels-chlorine-processing-1..4`). Factorio treats
+   techs with `-N` suffix as LEVELS of a composite tech; generating a
+   mirror per level (`dmrsa-mirror-angels-chlorine-processing-1..4`) created
+   a composite whose levels must be CONTIGUOUS — since level -3 did not
+   unlock replicable items (recipes excluded), its mirror was skipped and
+   the chain ended up 1,2,4 without 3. Fix: `normalize_tech_base()` — strip the
+   `-N` suffix and group the ENTIRE chain into ONE mirror, with prereq = the deepest
+   existing level (`mirror_deepest`). Lua pitfall: `string.find(name,
+   "%-%d+$")` does NOT capture the number (no parentheses) — use `"%-(" .. "%d+" ..
+   ")$"` or the depth tie-breaker is a no-op.
+General lesson: a dynamic generation fix that reads the tech graph of
+OTHER mods (recipe_tech_map, tree depth, prereqs) does not work without the optional
+deps of EVERY overhaul family present in the modlist, and tech chains with
+numeric suffix require grouping them into a SINGLE tech (see
+`references/factorio-2.1-breaking-changes.md` sections Pipe pictures +
 Non-contiguous + Leveled-tech chains).
-Backup de reversión intacto: `backups/dark-matter-replicators-reborn_3.7.1-source-backup.tar.gz`.
+Reversion backup intact: `backups/dark-matter-replicators-reborn_3.7.1-source-backup.tar.gz`.
 
-## ⚠️ CORRECCIÓN 2026-08-23 (gate test 4.2.0): el depth clamp INFLÓ los tiers — el fix real era la normalización de cadenas -N
+## ⚠️ FIX 2026-08-23 (gate test 4.2.0): the depth clamp INFLATED tiers — the real fix was the -N chain normalization
 
-El gate test 4.2.0 (dump real, 138 mods) destapó el efecto colateral del fix #2:
-usuario reportó "porque logistic science pack, chemical science pack estan en tier 5"
-+ "parece que muchas cosas se subieron de tiers". Dump-verificado:
+Gate test 4.2.0 (real dump, 138 mods) exposed the side effect of fix #2:
+user reported "because logistic science pack, chemical science pack are in tier 5"
++ "it seems like many things were bumped up in tiers". Dump-verified:
 
-- Mirrors de science packs mal: `logistic`=5 (debía 1), `military`=5 (debía 2),
-  `chemical`=5 (debía 3), `production/utility`=5 (debía 3), `automation`=2 (debía 1).
-- De 474 mirror techs: **216 con tier > SCL** (subidos por el clamp) y **154 con SCL
-  nil** (fallback a max item tier).
-- El deep modded tree (SA + planetaris + bob) da profundidades reales enormes:
+- Science pack mirrors wrong: `logistic`=5 (should be 1), `military`=5 (should be 2),
+  `chemical`=5 (should be 3), `production/utility`=5 (should be 3), `automation`=2 (should be 1).
+- Of 474 mirror techs: **216 with tier > SCL** (bumped by the clamp) and **154 with SCL
+  nil** (fallback to max item tier).
+- The deep modded tree (SA + planetaris + bob) produces enormous real depths:
   chemical=22, production=25, utility=29, space=39, promethium=80. `tier =
-  max(SCL, depth)` → TODO lo que esté a depth ≥5 se va a 5.
+  max(SCL, depth)` → EVERYTHING at depth ≥5 goes to 5.
 
-**INSIGHT CLAVE**: el depth clamp (fix #2, 2026-08-13) fue un Band-Aid intermedio. El
-error real "Non-contiguous levels" lo causaban las CADENAS NIVELADAS (`-N`), resueltas
-por `normalize_tech_base()` (fix #4). El clamp quedó activo y distorsiona la
-progresión completa en árboles de mods grandes. Dirección del fix (diseñada, PENDIENTE
-de implementar + gate test): QUITAR el clamp (o caparlo a la banda de progresión) y
-FORZAR los science packs por tabla de progresión.
+**KEY INSIGHT**: the depth clamp (fix #2, 2026-08-13) was an intermediate Band-Aid. The
+real "Non-contiguous levels" error was caused by LEVELED CHAINS (`-N`), resolved
+by `normalize_tech_base()` (fix #4). The clamp remained active and distorts the
+entire progression in large mod trees. Fix direction (designed, PENDING
+implementation + gate test): REMOVE the clamp (or cap it to the progression band) and
+FORCE science packs by progression table.
 
-**SEGUNDO INSIGHT**: para science packs, SCL NO es la señal correcta — la tech que
-DESBLOQUEA el pack usa packs de TIER INFERIOR (el research `chemical-science-pack`
-usa automation+logistic → SCL=1, pero el PACK es tier 3). El tier de un science pack =
-su POSICIÓN DE PROGRESIÓN (tabla v3.5.17: auto/logi=1, mili=2, chem/prod/util=3,
+**SECOND INSIGHT**: for science packs, SCL is NOT the right signal — the tech that
+UNLOCKS the pack uses LOWER-TIER packs (the `chemical-science-pack` research
+uses automation+logistic → SCL=1, but the PACK is tier 3). A science pack's tier =
+its PROGRESSION POSITION (table v3.5.17: auto/logi=1, mili=2, chem/prod/util=3,
 planetary=4, space/cryo/prom=5, mods gold/alien=5, numbered `science-pack-N` →
-max(2,min(5,N))). Para el mirror: función `science_item_tier(name)` con el MISMO mapeo
-de `CostSolver.get_tier_from_tech` (cost-solver.lua ~línea 400 — fuente canónica),
-aplicada ANTES de SCL/fallback/depth para cualquier ítem con "science-pack".
-OJO al orden de branches: `advanced%-logistic` (→3) DEBE chequearse ANTES del
-substring genérico `logistic` (→1), o bob-advanced-logistic vuelve a caer a 1
-(lección v3.7.0).
+max(2,min(5,N))). For the mirror: `science_item_tier(name)` function with the SAME mapping
+as `CostSolver.get_tier_from_tech` (cost-solver.lua ~line 400 — canonical source),
+applied BEFORE SCL/fallback/depth for any item with "science-pack".
+Watch the branch order: `advanced%-logistic` (→3) MUST be checked BEFORE the
+generic substring `logistic` (→1), or bob-advanced-logistic falls back to 1
+(lesson v3.7.0).
 
 ## v4.1.0 — Quality Refiner (2026-08-16)
-Feature nueva (la calidad NO sale del replicador normal; sale de una máquina
-dedicada). Ver `references/factorio-2.1-breaking-changes.md` para los 4 errores
-de prototipo 2.1 que salieron en el gate test (independent_probability, icon en
-recipes quality, icon en techs, repeat_count del shadow) — ya documentados ahí.
-Resumen del feature:
-- `dmrsa-refiner` (assembling-machine, categoría `dmrsa-refining`): sube items
-  replicables +1 grado de calidad, NUNCA salta (normal→uncommon→rare→epic→
-  legendary). Probabilidades decrecientes por escalón (1% / 0.5% / 0.25% /
-  0.1%), pérdida 5% del item por ciclo, reintento con el mismo item el resto.
-- Recipe por item×escalón (4 por item replicable), generadas por
-  `lib/refiner-generator.lua` tras el mirror (lee las recipes dmrsa-repl-* para
-  el coste energético base → ×10). Ingredients con `quality` fijo; results con
-  `independent_probability`. `hidden=true` + categoría propia (solo visibles en
-  el refiner). Gate: solo se genera si `data.raw["quality"]["uncommon"]` existe.
-- El refiner NO acepta módulos (module_slots=0) — la probabilidad ES el balance
-  (quality modules romperían la escalera).
-- Setting `dmrsa-replicator-quality` (default "Normal only"): el replicador
-  normal pone `quality="normal"` en sus recipes (fiel: replica materia normal);
-  "Allow quality" = modo permisivo (el viejo comportamiento).
-- Tech `dmrsa-replication-refining` (materials-5 + tech quality vanilla).
-- Tests: dmr-tests/test_refiner.lua (41 checks). Placeholder gráfico: sprite
-  propio replicator-5.png con tint obsidiana-violeta (NUNCA sprite vanilla — ver
-  la lección "own sprite" en breaking-changes).
-- Pitfall de test harness: `data:extend(...)` se llama como `data:extend(...)`;
-  en el mock, `data.extend = function(self, tbl) ... end` (el primer arg es
-  self) — si el mock usa `function(tbl)`, el método recibe `data` como tbl y el
-  assert falla.
+New feature (quality does NOT come from the normal replicator; it comes from a dedicated
+machine). See `references/factorio-2.1-breaking-changes.md` for the 4 prototype 2.1 errors
+that appeared in the gate test (independent_probability, icon in
+recipes quality, icon in techs, repeat_count of the shadow) — already documented there.
+Feature summary:
+- `dmrsa-refiner` (assembling-machine, category `dmrsa-refining`): upgrades replicable
+  items +1 quality tier, NEVER skips (normal→uncommon→rare→epic→
+  legendary). Decreasing probabilities per step (1% / 0.5% / 0.25% /
+  0.1%), 5% item loss per cycle, retries with the same item for the remainder.
+- Recipe per item×step (4 per replicable item), generated by
+  `lib/refiner-generator.lua` after the mirror (reads dmrsa-repl-* recipes for
+  base energy cost → ×10). Ingredients with fixed `quality`; results with
+  `independent_probability`. `hidden=true` + own category (only visible in
+  the refiner). Gate: only generated if `data.raw["quality"]["uncommon"]` exists.
+- The refiner does NOT accept modules (module_slots=0) — the probability IS the balance
+  (quality modules would break the ladder).
+- Setting `dmrsa-replicator-quality` (default "Normal only"): the normal replicator
+  sets `quality="normal"` in its recipes (faithful: replicates normal material);
+  "Allow quality" = permissive mode (old behavior).
+- Tech `dmrsa-replication-refining` (materials-5 + vanilla quality tech).
+- Tests: dmr-tests/test_refiner.lua (41 checks). Placeholder graphic: own
+  replicator-5.png sprite with obsidian-violet tint (NEVER vanilla sprite — see
+  "own sprite" lesson in breaking-changes).
+- Test harness pitfall: `data:extend(...)` is called as `data:extend(...)`;
+  in the mock, `data.extend = function(self, tbl) ... end` (first arg is
+  self) — if the mock uses `function(tbl)`, the method receives `data` as tbl and the
+  assert fails.
 
-## v4.2 (diseño abierto 2026-08-22) — baseline inflado por OUTPUTS de proceso
-**Síntoma del usuario**: `dmrsa-replication-materials-1` desbloquea "muchísimas
-cosas" con mods grandes. Dump 4.1.0 real (138 mods): materials-1 = **108 items**
-(vs 16 del diseño). 1716 recipes dmrsa-repl-* (vs 945 del 3.7.1).
+## v4.2 (open design 2026-08-22) — baseline inflated by process OUTPUTS
+**User symptom**: `dmrsa-replication-materials-1` unlocks "a huge amount of
+things" with large mods. Real 4.1.0 dump (138 mods): materials-1 = **108 items**
+(vs 16 from design). 1716 dmrsa-repl-* recipes (vs 945 from 3.7.1).
 
-**Causa raíz (confirmada con dump)**: el mirror adjudica la tech original por
-`unlock-recipe` con **recipe-name == item-name** (asunción 1:1). Los items que
-son OUTPUTS de recipes de proceso (petroquímica/electrólisis/crushing de
-Angel's: `angels-gas-hydrogen`, `angels-mineral-sludge`, `angels-geode-*`,
-`angels-ore1..6`, `angels-liquid-*`, `angels-crystal-*`) no tienen recipe con su
-propio nombre → el mirror no encuentra su tech → caen al baseline tier 1.
-Ejemplo real: `angels-gas-hydrogen` ← `angels-water-separation` ← tech
-`angels-basic-chemistry` (el unlock-recipe apunta a la recipe productora, no al
+**Root cause (confirmed with dump)**: the mirror assigns the original tech by
+`unlock-recipe` with **recipe-name == item-name** (1:1 assumption). Items that
+are OUTPUTS of process recipes (Angel's petrochemistry/electrolysis/crushing:
+`angels-gas-hydrogen`, `angels-mineral-sludge`, `angels-geode-*`,
+`angels-ore1..6`, `angels-liquid-*`, `angels-crystal-*`) do not have a recipe with their
+own name → the mirror cannot find their tech → they fall to baseline tier 1.
+Real example: `angels-gas-hydrogen` ← `angels-water-separation` ← tech
+`angels-basic-chemistry` (the unlock-recipe points to the producing recipe, not the
 item).
 
-**Método de diagnóstico (reusable, Python sobre data-raw-dump.json)**:
-1. construir `produced_by[item] = [recipe...]` iterando `recipe.results`
-2. construir `recipe_tech[recipe] = [tech...]` iterando
-   `tech.effects` (type==unlock-recipe), filtrando techs dmrsa-* y hidden
-3. para cada item baseline, ver si alguna recipe productora está unlocked por
-   una tech (excluir recipes `*-recycling`, `recycling`, `empty-*/fill-*`).
-⚠️ Pitfall de regex (mordió 2×): en Python los patrones NO usan el escape Lua
-`%-`; escribir `r'-armor$'` con guion normal. `r'%-armor$'` matchea el literal
-`%-armor` y no filtra nada.
+**Diagnostic method (reusable, Python on data-raw-dump.json)**:
+1. build `produced_by[item] = [recipe...]` iterating `recipe.results`
+2. build `recipe_tech[recipe] = [tech...]` iterating
+   `tech.effects` (type==unlock-recipe), filtering dmrsa-* and hidden techs
+3. for each baseline item, check if any producing recipe is unlocked by
+   a tech (exclude `*-recycling`, `recycling`, `empty-*/fill-*` recipes).
+⚠️ Regex pitfall (bit twice): in Python patterns do NOT use the Lua escape
+`%-`; write `r'-armor$'` with a normal hyphen. `r'%-armor$'` matches the literal
+`%-armor` and filters nothing.
 
-**Fix IMPLEMENTADO (v4.2.0, 2026-08-22)**: adjudicar la tech vía las recipes
-productoras, con 2 salvaguardas contra falsos positivos:
-1. no-minable (los `data.raw.resource` no heredan tech ajena — coal/iron-ore/etc.
-   son baseline legítimos aunque otra recipe los produzca como byproduct)
-2. mismo prefijo de mod (un item angels-* solo hereda de recipes angels-*).
-   + excluir explícitamente la tech `recycling` del reverse-map (filtró como
-   falsa "tech original" de `angels-ore1-crushed`) y las recipes
-   `*-recycling`/`empty-*`/`*-unbarrel`.
-Resultado medido (re-simulación CORREGIDA sobre el dump): materials-1
-108 → 25 items legítimos (coal, ores base, burner, plates base,
-water/steam/crude-oil...); espejo 1328 → 1497 techs. Modificación en
+**Fix IMPLEMENTED (v4.2.0, 2026-08-22)**: assign tech via producing
+recipes, with 2 safeguards against false positives:
+1. no-minable (`data.raw.resource` do not inherit foreign tech — coal/iron-ore/etc.
+   are legitimate baseline even though another recipe produces them as byproduct)
+2. same mod prefix (an angels-* item only inherits from angels-* recipes).
+   + explicitly exclude the `recycling` tech from the reverse-map (filtered as
+   false "original tech" of `angels-ore1-crushed`) and `*-recycling`/`empty-*`/
+   `*-unbarrel` recipes.
+Measured result (CORRECTED re-simulation on dump): materials-1
+108 → 25 legitimate items (coal, base ores, burner, base plates,
+water/steam/crude-oil...); mirror 1328 → 1497 techs. Changes in
 `lib/mirror-generator.lua` (pass 4b: `item_process_techs`) + `data-final-fixes`.
 
-**Pitfall de la simulación (mordió 2×): `.match()` ≠ `.search()` en Python.** La
-simulación predijo materials-1=30 y decía que plastic-bar/resin/rubber iban a
-mirror tech; el JUEGO (correcto) los dejaba en baseline tier 1. Causa: usé
-`re.compile(r'-recycling$').match(rname)` — `.match()` ANCLA al inicio del
-string, así que `"plastic-bar-recycling".match("-recycling$")` falla y la recipe
-NO se excluía → el item heredaba la tech falsa "recycling" → espejo. En Lua
-`string.find` es SEARCH, por eso el juego difiere. Regla: en sims Python de la
-lógica Lua siempre usar `.search()`, y ante una discrepancia sim-vs-juego
-revisar las exclusiones de la sim antes de creerle al framework.
+**Simulation pitfall (bit twice): `.match()` ≠ `.search()` in Python.** The
+simulation predicted materials-1=30 and said plastic-bar/resin/rubber would
+mirror a tech; the GAME (correctly) kept them at baseline tier 1. Cause: I used
+`re.compile(r'-recycling$').match(rname)` — `.match()` ANCHORS to the start of the
+string, so `"plastic-bar-recycling".match("-recycling$")` fails and the recipe
+was NOT excluded → the item inherited the false "recycling" tech → mirror. In Lua
+`string.find` is SEARCH, that is why the game differs. Rule: in Python sims of
+Lua logic always use `.search()`, and when a sim-vs-game discrepancy appears
+review the sim exclusions before trusting the framework.
 
-**Pitfall de diseño descubierto**: los overhaul mods REDIRECT los unlocks
-vanilla a sus propias recipes — con Bob's/Angel's la tech `plastics`
-desbloquea `bob-plastic-pipe`/`angels-solid-plastic`, NO `plastic-bar` (que
-queda sin NINGUNA tech en el mapa, ni hidden). Consecuencia: items base como
-plastic-bar/resin/rubber/wax/polysaccharides no tienen tech que les
-corresponda → baseline → caían a materials-1 regalados. Solución: el override
-de tier por nombre (ver MOD_ORE_TIERS en cost-solver) también cubre MATERIALES
-no-ores (plastic-bar→3, resin/rubber/wax/polysaccharides/sulfuric-acid/
+**Design pitfall discovered**: overhaul mods REDIRECT vanilla unlocks
+to their own recipes — with Bob's/Angel's the `plastics` tech
+unlocks `bob-plastic-pipe`/`angels-solid-plastic`, NOT `plastic-bar` (which
+has NO tech on the map, not even hidden). Consequence: base items like
+plastic-bar/resin/rubber/wax/polysaccharides have no corresponding tech →
+baseline → they were freebies in materials-1. Solution: the name-based tier
+override (see MOD_ORE_TIERS in cost-solver) also covers non-ore MATERIALS
+(plastic-bar→3, resin/rubber/wax/polysaccharides/sulfuric-acid/
 nitrogen/nitric-acid→3, ammoniacal/lava/blood/lymph/royal-jelly→4, sand→2...).
 
-**Fix de techs materials (locale + pack)**: las 5 techs `dmrsa-replication-materials-N`
-no definían `localised_name` explícito (dependían de key por-tier → renderizaba
-key cruda si faltaba) y `make_research_unit` podía dejar `ingredients = {}`
-cuando el pack tenemut no se detectaba (el tenemut es un TOOL prototype, no
-item) → la tech parecía "sin costo de research". Fixes: `localised_name = {
-"technology-name.dmrsa-materials-tech", def.tier }` (template explícito) y
-fallback de pack que usa CUALQUIER material DMR existente si el especificado
-falla (nunca ingredients vacío).
+**Materials tech fix (locale + pack)**: the 5 `dmrsa-replication-materials-N`
+techs did not define an explicit `localised_name` (relied on per-tier key → rendered
+raw key if missing) and `make_research_unit` could leave `ingredients = {}`
+when the pack tenemut was not detected (tenemut is a TOOL prototype, not
+item) → the tech appeared to have "no research cost". Fixes: `localised_name = {
+"technology-name.dmrsa-materials-tech", def.tier }` (explicit template) and
+pack fallback that uses ANY existing DMR material if the specified one
+fails (never empty ingredients).
 
-**Issue separado (no lo toca el fix)**: con 138 mods el cost-solver se degrada —
-iron-plate/copper-plate cayeron de tier 3 (dump 3.7.1) a tier 1 (dump 4.1.0)
-porque más ciclos de recipes resuelven a 1. Los ores de mods (angels-ore1..6,
-planetaris-*) también caen a tier 1. Si se retoma, ampliar MOD_ORE_TIERS /
-revisar el cost-solver, no el mirror.
+**Separate issue (not touched by the fix)**: with 138 mods the cost-solver degrades —
+iron-plate/copper-plate dropped from tier 3 (dump 3.7.1) to tier 1 (dump 4.1.0)
+because more recipe cycles resolve to 1. Mod ores (angels-ore1..6,
+planetaris-*) also drop to tier 1. If revisited, expand MOD_ORE_TIERS /
+review the cost-solver, not the mirror.
 
 ## v4.2 FIX (2026-08-23): depth clamp REMOVED + science packs forced — tier inflation
-**Síntoma (gate test 4.2.0)**: "muchas cosas se subieron de tiers", logistic/chemical
-science pack en tier 5. Dump real (138 mods): **458/474 mirror techs en replication-5** (97%).
+**Symptom (gate test 4.2.0)**: "many things were bumped up in tiers", logistic/chemical
+science pack in tier 5. Real dump (138 mods): **458/474 mirror techs in replication-5** (97%).
 
-**Causa raíz (2 causas apiladas)**:
-1. El **tree-depth clamp** (`tier = max(science_level, get_tech_tree_depth(orig_tech))`,
-   añadido en el gate test de 4.0 como cinturón-y-tirantes contra "Non-contiguous levels")
-   infla TODO con modlists reales: chemical-science-pack tiene depth 22,
-   promethium-science-pack depth 80 (la profundidad del árbol modded NO es la progresión).
-2. Los **science packs sin force**: el SCL de la tech que desbloquea un pack ≠ el tier de
-   progresión del pack (chemical-pack se investiga con packs t1 → SCL=1, pero el PACK es
-   progresión tier 3; su recipe además se inflaba por la cadena del cost-solver).
+**Root cause (2 stacked causes)**:
+1. The **tree-depth clamp** (`tier = max(science_level, get_tech_tree_depth(orig_tech))`,
+   added in the 4.0 gate test as belt-and-suspenders against "Non-contiguous levels")
+   inflates EVERYTHING with real modlists: chemical-science-pack has depth 22,
+   promethium-science-pack depth 80 (modded tree depth is NOT the progression).
+2. **Unforced science packs**: the SCL of the tech that unlocks a pack ≠ the pack's
+   progression tier (chemical-pack is researched with t1 packs → SCL=1, but the PACK is
+   progression tier 3; its recipe was also inflated by the cost-solver chain).
 
-**Fix aplicado en lib/mirror-generator.lua**:
+**Fix applied in lib/mirror-generator.lua**:
 - RECIPES: `local sci_forced = PACK_LEVELS[name] or MOD_PACK_LEVELS[name]; if sci_forced then tier = sci_forced end`
-  tras el override de tenemut.
-- MIRRORS: `forced_science_tier` = max PACK_LEVELS/MOD_PACK_LEVELS sobre los ITEMS del grupo
-  (lookup EXACTO por tabla, sin heurísticas de nombre sobre items arbitrarios); si existe,
-  fuerza el tier antes del branch SPREAD_TECHS/SCL.
-- **Depth clamp ELIMINADO** (comentario explica por qué). El hazard REAL de contigüidad eran
-  las cadenas niveladas `-N` y eso ya lo cubre `normalize_tech_base()`. Si Factorio vuelve a
-  rechazar un mirror específico por contigüidad, arreglar ESA cadena — no todo el árbol vía depth.
-- `get_tech_tree_depth()` queda definida pero sin llamadas (por si se necesita diagnóstico).
+  after the tenemut override.
+- MIRRORS: `forced_science_tier` = max PACK_LEVELS/MOD_PACK_LEVELS across the group's
+  ITEMS (EXACT table lookup, no name heuristics on arbitrary items); if present,
+  forces the tier before the SPREAD_TECHS/SCL branch.
+- **Depth clamp REMOVED** (comment explains why). The REAL contiguity hazard was
+  the leveled `-N` chains, already covered by `normalize_tech_base()`. If Factorio again
+  rejects a specific mirror for contiguity, fix THAT chain — not the whole tree via depth.
+- `get_tech_tree_depth()` remains defined but uncalled (in case diagnostics are needed).
 
-**Resultado FINAL (sim fiel al código + inferencia adaptable activa, ver sección siguiente)**:
-distribución 0/4/8/4/458 → **88/15/144/3/180** (+44 fallback cost-solver).
-Science packs exactos: auto/logi=1, military=2, chem/prod/util=3, planetarios=4,
-space/cryo/prom=5. (La primera sim reportó 253 en t1 porque NO replicaba
-`mirror_deepest` — ver pitfall de fidelidad de simulación abajo.)
+**FINAL RESULT (faithful sim to code + active adaptable inference, see next section)**:
+distribution 0/4/8/4/458 → **88/15/144/3/180** (+44 cost-solver fallback).
+Exact science packs: auto/logi=1, military=2, chem/prod/util=3, planetary=4,
+space/cryo/prom=5. (The first sim reported 253 in t1 because it did NOT replicate
+`mirror_deepest` — see simulation fidelity pitfall below.)
 
-**Lección general**: un clamp defensivo contra un error de carga concreto ("Non-contiguous")
-que escala con la PROFUNDIDAD DEL ÁRBOL es una bomba de tiempo con overhaul mods — el árbol
-modded tiene profundidades de 20-80 que nada tienen que ver con la progresión 1-5. Validar
-siempre la DISTRIBUCIÓN resultante sobre el dump real antes de publicar (Counter de prereqs
-replication-N), no solo la ausencia de crash.
+**General lesson**: a defensive clamp against a specific load error ("Non-contiguous")
+that scales with TREE DEPTH is a time bomb with overhaul mods — the modded
+tree has depths of 20-80 that have nothing to do with the 1-5 progression. Always
+validate the resulting DISTRIBUTION on the real dump before publishing (Counter of prereqs
+replication-N), not just the absence of a crash.
 
-### v4.2 continuación (mismo día, 2026-08-23): ADAPTABILITY + fidelidad de simulación + handoff
-- **DECISIÓN DE DISEÑO (usuario): el mod debe ser ADAPTABLE a cualquier modlist, no
-  solo la nuestra.** Implementado como `ensure_inferred_pack_levels()` en
-  mirror-generator.lua — IMPORTANTE: declarar ANTES de `pack_level` o los upvalues
-  resuelven como globals nil (mordido y corregido en vivo). Packs desconocidos se
-  anclan dinámicamente: `level(P) = max nivel-tabla entre las techs visibles no-hidden
-  que consumen P`, excluyendo kitchen-sinks (>8 ingredientes distintos) para que
-  mega-techs endgame no arrastren packs tempranos a L5. Un pase, sin recursión,
-  derivado solo de niveles ya tabulados → sin ciclos. Getter testeable:
-  `MirrorGenerator.get_inferred_pack_level()` (+5 tests en test_mirror.lua → 54 checks).
-  Medido en dump 138 mods: galvanization/golden/planetaris/apicultural/token-bio → L5.
-- **PITFALL de fidelidad de simulación (nueva instancia de la clase sim-vs-código)**:
-  al simular tiers del mirror en Python HAY QUE replicar `mirror_deepest` — resolver el
-  base name a su nivel más profundo `-N` existente antes de calcular SCL (índice regex
-  base→nivel sobre los nombres reales del dump). La sim sin esto reportó 253 techs en
-  tier 1; la fiel dio 90 — y el usuario detectó la anomalía ("revisa los tier 1 porque
-  hay demasiados"). Regla: cuando una sim contradice la intuición del usuario, auditar
-  PRIMERO la fidelidad de la sim al código Lua antes de proponer cambios de diseño.
-  Los 90 t1 resultaron legítimos: SCL=1 REAL de la modlist del usuario (Bob's mueve
-  advanced-circuit a green science; Angel's metallurgy-1/2/ore-crushing SON early game).
-- **Handoff entre agentes (patrón del proyecto)**: el repo root mantiene `AGENTS.md`
-  como doc de estado para agentes externos — opencode lo lee automáticamente al trabajar
-  en esa carpeta. Contenido: qué es el mod, estado exacto (portal vs local), fixes del
-  gate test con causas raíz, decisiones de diseño vigentes, arquitectura y orden de
-  carga, workflows verificados, pitfalls críticos, issues abiertos. MANTENERLO al día
-  tras cada cambio mayor de estado; es el contrato Hermes↔opencode.
-- **BATCH F1-F4 — APLICADO (2026-08-23, v4.2.1 lista**; specs originales en
-  `research/nosotros-fix-specs.md`): gate test PASÓ → 4.2.0 publicado → batch único.
-  F1 `%-vequip$` (6 Angel's vehiculares: burner-generator, fusion-reactor,
+### v4.2 continuation (same day, 2026-08-23): ADAPTABILITY + simulation fidelity + handoff
+- **DESIGN DECISION (user): the mod must be ADAPTABLE to any modlist, not
+  just ours.** Implemented as `ensure_inferred_pack_levels()` in
+  mirror-generator.lua — IMPORTANT: declare BEFORE `pack_level` or the upvalues
+  resolve as nil globals (hit and fixed live). Unknown packs are
+  anchored dynamically: `level(P) = max table-level among visible non-hidden techs
+  that consume P`, excluding kitchen-sinks (>8 distinct ingredients) so that
+  endgame mega-techs do not drag early packs to L5. A single pass, no recursion,
+  derived only from already-tabulated levels → no cycles. Testable getter:
+  `MirrorGenerator.get_inferred_pack_level()` (+5 tests in test_mirror.lua → 54 checks).
+  Measured on 138-mod dump: galvanization/golden/planetaris/apicultural/token-bio → L5.
+- **SIMULATION FIDELITY PITFALL (new instance of the sim-vs-code class)**:
+  when simulating mirror tiers in Python you MUST replicate `mirror_deepest` — resolve the
+  base name to its deepest existing `-N` level before computing SCL (regex index
+  base→level over real dump names). The sim without this reported 253 techs in
+  tier 1; the faithful one gave 90 — and the user spotted the anomaly ("check tier 1 because
+  there are too many"). Rule: when a sim contradicts user intuition, audit
+  FIRST the sim's fidelity to the Lua code before proposing design changes.
+  The 90 t1 turned out to be legitimate: REAL SCL=1 from the user's modlist (Bob's moves
+  advanced-circuit to green science; Angel's metallurgy-1/2/ore-crushing ARE early game).
+- **Cross-agent handoff (project pattern)**: the repo root maintains `AGENTS.md`
+  as state doc for external agents — opencode reads it automatically when working
+  in that folder. Contents: what the mod is, exact status (portal vs local), gate test fixes with
+  root causes, current design decisions, architecture and load order,
+  verified workflows, critical pitfalls, open issues. KEEP it up to date
+  after each major state change; it is the Hermes↔opencode contract.
+- **BATCH F1-F4 — APPLIED (2026-08-23, v4.2.1 ready**; original specs in
+  `research/nosotros-fix-specs.md`): gate test PASSED → 4.2.0 published → single batch.
+  F1 `%-vequip$` (6 Angel's vehicular: burner-generator, fusion-reactor,
   repair/construction-roboport, heavy-energy-shield + rocket-defense hidden —
-  MECANISMO del escaparate: son `type="item"` con `place_as_equipment_result`,
-  así que también se salvan del registry de vehículos, no solo de bob-vehicle-*/equipment),
-  F2 `^rpg_.*_potion$` (8 pociones), F3 `MOD_ORE_TIERS` floors (ver §consumibles).
-  Tests: test_mirror 49→68 (+19: 5 vequip + 8 potions + anti-colisión
-  `angels-accessory` KEPT — ojo: el fixture KEPT necesita recipe productora en el
-  mock o falla el filtro de elegibilidad, no la exclusión).
-- **INSIGHT: recycling-circularity hace replicables items drop-only** — las recipes
-  `-recycling` autogeneradas (disabled, hidden) CUENTAN como productoras en la regla
-  de elegibilidad, así que un item cuya única recipe es su propio `-recycling` pasa
-  el filtro (confirmado: existen `dmrsa-repl-rpg_*` en el dump = eran replicables).
-  Sobre el dump, la sim con ports que EXCLUYEN recycling del mapa de productores da
-  delta −5 (solo vequip) mientras el juego real da −13: discrepancia esperada entre
-  sim y juego — reconciliar contando las recipes en la regla de elegibilidad de la
-  MISMA forma que `is_produced_by_recipe` del código, no como `build_recipe_map`.
-- **Anomalía fission-construction-robot VERIFICADA (dump)**: sin recipe productora
-  real (solo `-recycling` disabled + `-macerating` que la CONSUME; nunca unlocked por
-  tech), `hidden_in_factoriopedia=true`, `place_result` a entidad construction-robot
-  propia → probablemente entregado por script/evento o huérfano del mod. KEEP t3
-  mantenido; verificar obtención in-game cuando se pruebe 4.2.1.
-- **Estado 4.2.1**: zip construido (114 files, parity portal sin ROADMAP/FAQ, version
-  bump en info.json, changelog prepend NORMAL — el accumulated-NOTE solo aplica cuando
-  hay múltiples versiones sin publicar, no en patches), suite 68+54+41+step_filter
-  PASS, privacy CLEAN. RESUELTO: usuario sube el zip al portal desde su PC;
-  **GitHub push de 4.2.1 SKIPPEADO por decisión del usuario** (solo portal esta vez)
-  — el AGENTS.md quedó documentado con esa decisión. Lección de flujo: para ESTE
-  usuario el push a GitHub es por-versión OPCIONAL — preguntar antes de pushear, no
-  asumir; el push en sí puede requerir aprobación del gate de comandos (`rm -rf` del
-  clon temporal + force push → se bloquea esperando consentimiento).
+  MECHANISM of the escape: they are `type="item"` with `place_as_equipment_result`,
+  so they also escape the vehicle registry, not just bob-vehicle-*/equipment),
+  F2 `^rpg_.*_potion$` (8 potions), F3 `MOD_ORE_TIERS` floors (see §consumables).
+  Tests: test_mirror 49→68 (+19: 5 vequip + 8 potions + anti-collision
+  `angels-accessory` KEPT — note: the KEPT fixture needs a producing recipe in the
+  mock or the eligibility filter fails, not the exclusion).
+- **INSIGHT: recycling-circularity makes drop-only items replicable** — the auto-generated
+  `-recycling` recipes (disabled, hidden) COUNT as producers in the eligibility
+  rule, so an item whose only recipe is its own `-recycling` passes
+  the filter (confirmed: `dmrsa-repl-rpg_*` exist in the dump = they were replicable).
+  On the dump, the sim with ports that EXCLUDE recycling from the producer map gives
+  delta −5 (only vequip) while the real game gives −13: expected discrepancy between
+  sim and game — reconcile by counting recipes in the eligibility rule the
+  SAME way as `is_produced_by_recipe` in the code, not like `build_recipe_map`.
+- **fission-construction-robot anomaly VERIFIED (dump)**: no real producing
+  recipe (only disabled `-recycling` + `-macerating` which CONSUMES it; never unlocked by
+  tech), `hidden_in_factoriopedia=true`, `place_result` to own construction-robot
+  entity → probably delivered by script/event or orphaned from the mod. KEEP t3
+  maintained; verify in-game acquisition when testing 4.2.1.
+- **v4.2.1 status**: zip built (114 files, parity with portal without ROADMAP/FAQ, version
+  bump in info.json, changelog prepend NORMAL — accumulated-NOTE only applies when
+  there are multiple unpublished versions, not in patches), suite 68+54+41+step_filter
+  PASS, privacy CLEAN. RESOLVED: user uploads zip to portal from their PC;
+  **GitHub push of 4.2.1 SKIPPED per user decision** (portal only this time)
+  — AGENTS.md was updated with that decision. Workflow lesson: for THIS
+  user the GitHub push is per-version OPTIONAL — ask before pushing, do not
+  assume; the push itself may require gate command approval (`rm -rf` of the
+  temp clone + force push → blocks waiting for consent).
 
-## Balance: tenemut replicable SOLO a tier 5 (2026-08-13, "Dominio de la Materia Oscura")
-Decisión del usuario: el tenemut (materia prima del mod / moneda de research)
-NO se replica hasta el tier 5 — cierre de ciclo temático: llegas al
-replicator-5 → dominas la materia oscura → puedes replicar SU materia prima.
-El resto de items `dmrsa-*` (scoop, transducer, conduit, lab, replicadores)
-SIGUE sin replicarse (anti-loop).
-Implementación (2 archivos):
-- `lib/target-mapper.lua`: la regla anti-loop de prefijo `dmrsa-` ahora
-  EXCLUYE solo `name ~= gprefix .. "tenemut"` — el tenemut pasa el filtro.
-- `lib/mirror-generator.lua`: en el bucle de recipes, `if name == gprefix ..
-  "tenemut" then tier = 5 end` — cae al baseline tier 5 → se desbloquea con
-  `replication-materials-5` (máquina tier 5 + conduit).
-Alternativa descartada: tier 4 (haría triviales los packs de tier 5); replicar
-desde el principio (rompería TODO el balance del mod). Los DERIVADOS del
-tenemut (scoop/transducer/conduit) podrían replicarse en su tier natural sin
-romper nada (el cuello de botella sigue siendo el tenemut minado) — quedó como
-decisión futura; el usuario prefirió mantenerlos NO replicables por ahora.
+## Balance: tenemut replicable ONLY at tier 5 (2026-08-13, "Dark Matter Dominance")
+User decision: tenemut (mod raw material / research currency)
+is NOT replicable until tier 5 — thematic cycle closure: you reach
+replicator-5 → you master dark matter → you can replicate ITS raw material.
+All other `dmrsa-*` items (scoop, transducer, conduit, lab, replicators)
+remain non-replicable (anti-loop).
+Implementation (2 files):
+- `lib/target-mapper.lua`: the anti-loop prefix rule for `dmrsa-` now
+  EXCLUDES only `name ~= gprefix .. "tenemut"` — tenemut passes the filter.
+- `lib/mirror-generator.lua`: in the recipe loop, `if name == gprefix ..
+  "tenemut" then tier = 5 end` — falls to baseline tier 5 → unlocked with
+  `replication-materials-5` (tier 5 machine + conduit).
+Discarded alternative: tier 4 (would make tier 5 packs trivial); replicable
+from the start (would break ALL mod balance). Tenemut DERIVATIVES
+(scoop/transducer/conduit) could be replicated at their natural tier without
+breaking anything (bottleneck is still mined tenemut) — left as a future
+decision; user preferred to keep them non-replicable for now.
 
-## Por qué existe
-El sistema v3.x categoría→tier (ver skill dmr-category-tier-refactor) NO gateaba
-la progresión de verdad. Análisis dump: 46% de items en `general` (sin piso),
-503 items cuyo tier no coincidía con el science level de su tech original, y 25
-offenders endgame en tier 3 (requester-chest, mech-armor, nuclear-fuel, ...).
-Causa raíz: el cost-solver (cadena de ingredientes) es una mala señal de
-progresión; la señal correcta es la TECH ORIGINAL del item.
+## Why it exists
+The v3.x category→tier system (see skill dmr-category-tier-refactor) did NOT gate
+the progression for real. Dump analysis: 46% of items in `general` (no floor),
+503 items whose tier did not match the science level of their original tech, and 25
+endgame offenders in tier 3 (requester-chest, mech-armor, nuclear-fuel, ...).
+Root cause: the cost-solver (ingredient chain) is a bad signal for
+progression; the correct signal is the item's ORIGINAL TECH.
 
-## El sistema
-- UNA tech de replicación por cada tech ORIGINAL del juego: "Replication:
-  Logistic System" desbloquea las recipes de replicación de TODOS los items que
-  esa tech desbloquea.
-- Grouped Categories ELIMINADO. Las categorías (shape/alloy/chemical/...) quedan
-  SOLO como subgroups visuales del menú de crafting.
-- Tier de cada mirror tech = science level de su tech original (automation/
+## The system
+- ONE replication tech for each ORIGINAL game tech: "Replication:
+  Logistic System" unlocks the replication recipes for ALL items that
+  tech unlocks.
+- Grouped Categories ELIMINATED. Categories (shape/alloy/chemical/...)
+  remain ONLY as visual subgroups in the crafting menu.
+- Tier of each mirror tech = science level of its original tech (automation/
   logistic=1, military=2, chemical/production/utility=3, planetary=4,
-  space/cryogenic/promethium=5). Packs de mods: bob-science-pack-gold,
-  bob-alien-science-pack-* → 5 (tabla MOD_PACK_LEVELS).
-- Cadena de progresión: replication-N (máquina) → replication-materials-N
-  (materiales base del tier, con tenemut/scoop/transducer/conduit) → mirror
-  techs (prereq: máquina + materials + tech original si
+  space/cryogenic/promethium=5). Mod packs: bob-science-pack-gold,
+  bob-alien-science-pack-* → 5 (table MOD_PACK_LEVELS).
+- Progression chain: replication-N (machine) → replication-materials-N
+  (base materials for the tier, with tenemut/scoop/transducer/conduit) → mirror
+  techs (prereq: machine + materials + original tech if
   dmrsa-require-original-tech=ON).
-- threshold=1: toda tech original con ≥1 item replicable genera su mirror
-  (sin tamaño mínimo de grupo).
-- Items SIN tech original (ores, fluidos, placas, básicos vanilla, ~88-93) →
-  baseline, desbloqueados por la materials tech de su tier.
-- Items planetarios (50, subgroup dmrsa-replication-resources) mantienen su
-  routing a las planetary techs (vulcanus/fulgora/gleba/aquilo).
+- threshold=1: every original tech with ≥1 replicable item generates its mirror
+  (no minimum group size).
+- Items WITHOUT original tech (ores, fluids, plates, basic vanilla, ~88-93) →
+  baseline, unlocked by the materials tech of their tier.
+- Planetary items (50, subgroup dmrsa-replication-resources) keep their
+  routing to the planetary techs (vulcanus/fulgora/gleba/aquilo).
 
-## Exclusiones v4.0 (144 items) — aprobadas por el usuario 2026-08-12
-EXCLUIDOS (1-solo-uso, no producción masiva): guns (11), armor (10), combat
-capsules (10: patrones grenade/capsule/explosives/poison/slowdown/defender/
-distractor/destroyer/fire/laser-robot), vehículos (27: car/tank/spider-vehicle/
+## Exclusions v4.0 (144 items) — approved by user 2026-08-12
+EXCLUDED (single-use, no mass production): guns (11), armor (10), combat
+capsules (10: grenade/capsule/explosives/poison/slowdown/defender/
+distractor/destroyer/fire/laser-robot patterns), vehicles (27: car/tank/spider-vehicle/
 locomotive/cargo-wagon/fluid-wagon/artillery-wagon), vehicle equipment (50:
-bob-vehicle-*), personal equipment (36: `*-equipment$` EXCEPTO solar/battery).
-KEPT (uso masivo): munición (55, aliens), fuel cells (10, reactores), seeds (3,
-Gleba), raw-fish (curar), solar panels + baterías (9).
+bob-vehicle-*), personal equipment (36: `*-equipment$` EXCEPT solar/battery).
+KEPT (mass use): ammo (55, aliens), fuel cells (10, reactors), seeds (3,
+Gleba), raw-fish (healing), solar panels + batteries (9).
 
-## Archivos
-- `lib/mirror-generator.lua` (NUEVO) — recipes + reverse map (tech → items) +
-  mirror techs + attach baseline→materials. Devuelve planetary_unlocks.
-- `lib/target-mapper.lua` — `is_v4_excluded()` (tipos + patrones).
-- `data-final-fixes.lua` — PASS 0 elige Mirror (default) vs Individual (legacy);
-  PASS 6 (re-attach) ELIMINADO (innecesario: reverse map se construye con datos
-  finales y el prereq ES la tech original).
-- `prototypes/technologies/technologies.lua` — 5 techs replication-materials-N
-  (effects vacíos, se llenan en generate()).
+## Files
+- `lib/mirror-generator.lua` (NEW) — recipes + reverse map (tech → items) +
+  mirror techs + attach baseline→materials. Returns planetary_unlocks.
+- `lib/target-mapper.lua` — `is_v4_excluded()` (types + patterns).
+- `data-final-fixes.lua` — PASS 0 chooses Mirror (default) vs Individual (legacy);
+  PASS 6 (re-attach) ELIMINATED (unnecessary: reverse map is built with final
+  data and the prereq IS the original tech).
+- `prototypes/technologies/technologies.lua` — 5 replication-materials-N techs
+  (empty effects, filled in generate()).
 - `settings.lua` — `dmrsa-require-original-tech` (bool, default true);
   `dmrsa-tech-distribution`: "Mirror" (default) / "Individual" (legacy v3.x).
-- `defines.lua` — dmrsa_is_v21() ELIMINADO (2.1 only, categories array).
+- `defines.lua` — dmrsa_is_v21() ELIMINATED (2.1 only, categories array).
 - `info.json` — 4.0.0, factorio_version "2.1".
-- `prototypes/recipes/dynamic-generator.lua` — se mantiene como generador legacy
-  Individual; grouped desactivado (use_grouped_techs=false).
+- `prototypes/recipes/dynamic-generator.lua` — kept as legacy Individual
+  generator; grouped disabled (use_grouped_techs=false).
 - locale en/es-ES — dmrsa-mirror-tech, dmrsa-materials-tech,
   replication-materials-1..5, setting require-original-tech. 2026-08-14:
-  `dmrsa-matter-conduit` renombrado a "Nanophase Conduit" (EN) / "Conducto
-  nanofase" (ES) — único renaming aplicado del lote propuesto.
-- `dmr-tests/test_mirror.lua` (NUEVO) — 30 checks: get_tech_science_level +
-  exclusiones v4.0. Correr con lua5.2.
+  `dmrsa-matter-conduit` renamed to "Nanophase Conduit" (EN) / "Conducto
+  nanofase" (ES) — only renaming applied from the proposed batch.
+- `dmr-tests/test_mirror.lua` (NEW) — 30 checks: get_tech_science_level +
+  v4.0 exclusions. Run with lua5.2.
 
-## Renaming de materiales + nuevo item tier 5 (PROPUESTA 2026-08-13 → DESCARTADA en su mayoría 2026-08-14)
-El usuario quería rehacer los iconos de tenemut/scoop/transducer/conduit, renombrarlos
-y AGREGAR UN ITEM NUEVO para el tier 5 (hoy el tier 5 reutiliza matter-conduit en
-`technologies.lua` materials_defs: `{tier=5, pack=gprefix.."matter-conduit"}` y en
-`tier_material_pack()` del mirror-generator: tier 4 Y 5 → matter-conduit).
-Propuesta original (tema: progresión de dominio sobre la realidad): Tenemut (se mantiene),
-**Resonance Latch** (hoy scoop), **Atomic Loom** (hoy transducer), **Nanophase Conduit**
-(hoy conduit), **Genesis Loom** (NUEVO item `dmrsa-genesis-loom`, cierra el arco con el
-tenemut tier-5). IMPORTANTE (si se retoma): mantener los IDs internos y cambiar SOLO display
-names vía locale → cero riesgo de saves rotos; el tier 5 sí es ID nuevo + recipe. Tocará:
+## Material renaming + new tier 5 item (PROPOSAL 2026-08-13 → MOSTLY DISCARDED 2026-08-14)
+User wanted to redo tenemut/scoop/transducer/conduit icons, rename them
+and ADD A NEW ITEM for tier 5 (today tier 5 reuses matter-conduit in
+`technologies.lua` materials_defs: `{tier=5, pack=gprefix.."matter-conduit"}` and in
+`tier_material_pack()` of mirror-generator: tier 4 AND 5 → matter-conduit).
+Original proposal (theme: progression of mastery over reality): Tenemut (kept),
+**Resonance Latch** (today scoop), **Atomic Loom** (today transducer), **Nanophase Conduit**
+(today conduit), **Genesis Loom** (NEW item `dmrsa-genesis-loom`, closes the arc with
+tenemut tier-5). IMPORTANT (if revisited): keep internal IDs and change ONLY display
+names via locale → zero broken-save risk; tier 5 is indeed a new ID + recipe. Will touch:
 dark-matter.lua, base-recipes.lua, technologies.lua (pack tier 5), tier_material_pack(),
-locale EN/ES, iconos.
-**ESTADO FINAL 2026-08-14 (decisión del usuario)**: el renaming completo NO convenció y se
-DESCARTÓ. Solo se aplicó `matter-conduit` → "Nanophase Conduit" (EN) / "Conducto nanofase"
-(ES) en locale — sin tocar IDs, recipes ni techs. Genesis Loom queda SIN implementar
-(shelved, no hay fecha). Los iconos IA se descartaron por completo (ver abajo). No retomar
-el renaming ni Genesis Loom sin petición explícita del usuario.
+locale EN/ES, icons.
+**FINAL STATUS 2026-08-14 (user decision)**: the full renaming was not convincing and was
+DISCARDED. Only applied `matter-conduit` → "Nanophase Conduit" (EN) / "Conducto nanofase"
+(ES) in locale — without touching IDs, recipes, or techs. Genesis Loom remains UNIMPLEMENTED
+(shelved, no date). AI icons were fully discarded (see below). Do not resume
+renaming or Genesis Loom without explicit user request.
 
-## Generación de iconos por API (2026-08-13 verificado → 2026-08-14 DESCARTADO)
-Ver `references/dmr-icon-assets-generation.md`. ESTADO FINAL: el usuario DESCARTÓ la
-generación de imágenes por IA (Gemini dio cartoon ×2, Canva Pro dio renders 3D) y pidió
-eliminar las referencias e investigación. Datos verificados que quedan documentados ahí por
-si algún día se retoma: opencode-go NO genera imágenes (25 modelos, todos chat/texto);
-GOOGLE_API_KEY y OPENROUTER_API_KEY válidas en el archivo de env del perfil
-local; Google free-tier
-429 quota 0 para modelos de imagen; OpenRouter tiene los modelos pero la cuenta requiere
-ajustar data-policy en openrouter.ai/settings/privacy (404). El prompt de familia coherente
-(paleta #0a0a14/#7c3aed) y el anti-cartoon/anti-3D anchoring también están en esa referencia.
+## API icon generation (2026-08-13 verified → 2026-08-14 DISCARDED)
+See `references/dmr-icon-assets-generation.md`. FINAL STATUS: user DISCARDED
+AI image generation (Gemini gave cartoon ×2, Canva Pro gave 3D renders) and asked
+to remove references and research. Verified data still documented there in case
+some day it is revisited: opencode-go does NOT generate images (25 models, all chat/text);
+GOOGLE_API_KEY and OPENROUTER_API_KEY valid in ~/.hermes/.env; Google free-tier
+429 quota 0 for image models; OpenRouter has the models but the account requires
+adjusting data-policy in openrouter.ai/settings/privacy (404). The coherent family prompt
+(palette #0a0a14/#7c3aed) and anti-cartoon/anti-3D anchoring are also in that reference.
 
-## Números (dump 3.7.1, Bob's+SA)
-945 items → 144 excluidos → 801 replicables → 713 con tech original → ~417
+## Numbers (dump 3.7.1, Bob's+SA)
+945 items → 144 excluded → 801 replicable → 713 with original tech → ~417
 mirror techs (300 single + ~117 multi) + 5 materials + 4 planetary ≈ 426 techs
-(vs 945 individuales en v3.x).
+(vs 945 individual in v3.x).
 
-## Preferencias de workflow del usuario (observadas 2026-08-12)
-- Design-first: brainstorming con opciones A/B/C/D → elegir → VERIFICAR con
-  datos del dump ANTES de implementar.
-- Cuando el usuario referencia una opción del brainstorm ("la opción A", "el
-  umbral", "individual"), RE-LEER todos los mensajes desde ese punto antes de
-  interpretar — el shorthand puede significar algo distinto a la lectura obvia
-  ("individual" = threshold-1 mirror, NO techs por item; el malentendido costó
-  varios round-trips).
-- Rediseños grandes: mantener la versión publicada intacta, crear backup tar.gz
-  antes de tocar, trabajar con seguridad de reversión.
-- Quality support: IMPLEMENTADO en v4.1.0 (Quality Refiner) — ver sección
-  v4.1.0 arriba. Baseline inflado por outputs de proceso (v4.2): IMPLEMENTADO
-  en v4.2.0 (fix process-output techs + override universal de tier de
-  materiales) — ver sección v4.2. Pendiente para otra iteración: la
-  degradación global del cost-solver con 138 mods (iron-plate 3→1) y el review
-  del modlist final tras el gate test.
+## User workflow preferences (observed 2026-08-12)
+- Design-first: brainstorming with A/B/C/D options → choose → VERIFY with
+  dump data BEFORE implementing.
+- When the user references a brainstorm option ("option A", "the
+  threshold", "individual"), RE-READ all messages from that point before
+  interpreting — the shorthand may mean something different from the obvious reading
+  ("individual" = threshold-1 mirror, NOT per-item techs; the misunderstanding cost
+  several round-trips).
+- Major redesigns: keep the published version intact, create backup tar.gz
+  before touching, work with revert safety.
+- Quality support: IMPLEMENTED in v4.1.0 (Quality Refiner) — see section
+  v4.1.0 above. Baseline inflated by process outputs (v4.2): IMPLEMENTED
+  in v4.2.0 (fix process-output techs + universal materials tier override) —
+  see section v4.2. Pending for another iteration: global cost-solver
+  degradation with 138 mods (iron-plate 3→1) and final modlist review
+  after the gate test.

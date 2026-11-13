@@ -8,14 +8,14 @@ data-updates/data-final-fixes is the only ground truth._
 ## 1. Getting the dump (user's Windows PC)
 
 1. Close Factorio.
-2. `cd "<game-install-dir>\bin\x64"` (user's
-   path; write dir is `<APPDATA>/Factorio`).
+2. `cd "C:\Program Files (x86)\Steam\steamapps\common\Factorio\bin\x64"` (user's
+   path; write dir is `C:/Users/jaer1/AppData/Roaming/Factorio`).
 3. `factorio.exe --dump-data` (~1-5 min, headless, loads ALL active mods).
 4. Output: **ONE file** `script-output\data-raw-dump.json` in the write dir —
    NOT a folder with per-type files (Windows Explorer hides `.json`, so it
    shows as a bare `data-raw-dump` item). ~90MB with Bob's.
 5. Transfer via SCP (Telegram 20MB cap): `scp data-raw-dump.json
-   <user>@<host>:<project-dumps-dir>/`
+   jaer@<IP>:~/projects/Factorio-Modding/dark-matter-replicator/dumps/`
    or 7-Zip first. Also grab `factorio-current.log` (same dir).
 
 ## 2. What the log tells you first (read before the JSON)

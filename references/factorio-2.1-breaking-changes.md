@@ -92,6 +92,34 @@ errors at load when used as a standalone per-result chance. DMR hit this twice:
 write the generator AND the test assert with the new key — the local unit test
 (`independent_probability`) catches it only if you update it too.
 
+### Recipe input quality gate — `quality_min`/`quality_max`, NOT `ingredients[].quality` (2.1)
+
+`ingredients = {{type="item", name=X, amount=1, quality="uncommon"}}` does **not** filter which quality
+may be inserted. The filter the engine actually applies is **`quality_min` / `quality_max` on the
+recipe**, and both take a **quality NAME** ("uncommon"), not a level index — pass a number and it
+errors/mismatches.
+Symptom when you trust the old field: a recipe meant for ONE grade accepts every grade, so a
+quality ladder that was supposed to be un-skippable lets a normal item ride the legendary step
+straight up.
+**Prove the gate on the engine before shipping it**: place the machine, try inserting a wrong-grade
+item into the recipe's input (`entity.get_inventory(defines.inventory.crafter_input).insert(...) == 0`)
+and a right-grade one (`== 1`). A static check of the recipe table cannot show whether the engine
+enforces the field you wrote.
+
+### Crafting machine input inventory is derived from the SELECTED RECIPE
+
+The input inventory of an assembling/crafting machine has **one slot per distinct ingredient of its
+selected recipe** and exposes no free slots. An ingredient-less recipe (results only) gives an EMPTY
+input inventory (`#ins == 0`) and `can_insert` answers false for everything — a hand- or
+inserter-inserted item can never land there for a script to act on. Measured on 2.1.23 with a live
+server run: insertion returned 0.
+`ingredient_inventory_size` scales the recipe's ingredient slots; it does **not** create free slots
+for an ingredient-less recipe (size 10 still measured 0 slots).
+**Consequence**: a machine that must RECEIVE an arbitrary item by hand needs either (a) a recipe that
+names that item as an ingredient — a script can repoint the recipe as the item changes — (b) a
+`container`/inserter-fed entity, or (c) a logistics request slot. Never design around "set
+`ingredient_inventory_size = N` and players will drop items in"; it silently does nothing.
+
 ### Recipes with `quality` fields REQUIRE an explicit `icon` (2.1)
 **Error** (data stage): `Key "icon" not found in property tree at
 ROOT.recipe.<name>`
@@ -334,6 +362,9 @@ pipe_picture = require("__base__/prototypes/entity/assembler-pictures").assemble
 - `LuaRecipe::always_show_products`, `show_amount_in_title` removed
 - `LuaRecipe::is_parameter` → `LuaPrototypeBase::parameter`
 - `LuaRecipe::result_is_always_fresh` → product-level field
+- **`energy_required` is DATA-stage only** — the runtime `LuaRecipePrototype` exposes the same value as
+  **`energy`** (`prototypes.recipe[name].energy`). Reading `energy_required` off a runtime recipe returns
+  nil and silently zeroes any craft-time math built on it.
 
 ### Fluid system rework
 - `LuaFluidBox` **removed entirely**
