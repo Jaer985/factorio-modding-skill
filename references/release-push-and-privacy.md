@@ -12,7 +12,7 @@ BOTH the git staging area AND the zip contents. Scriptable pattern:
 ```python
 # Check repo or zip contents for leaks
 sensitive_pats = ['github_pat_', 'ghp_', 'GITHUB_TOKEN', 'GITHUB_PERSONAL',
-                  '~', 'servicesjmtech', 'password', 'api_key', 'secret']
+                  '/home/[a-z0-9_]+/', 'servicesjmtech', 'password', 'api_key', 'secret']
 name_pats = ['.env', '.pem', '.key', '.ds_store', 'thumbs.db']
 # For each file (text): content scan for sensitive_pats
 # For each file name: check name_pats
@@ -28,6 +28,44 @@ For the zip, also verify:
   parent level so it never packages) — verify it's not inside the zip.
 
 Result to report: "NO LEAKS — repo clean" with the count of scanned files.
+
+## Publishing THIS skill to its public repo (sanitise the clone, never the source)
+
+`Jaer985/factorio-modding-skill` is public; the working copy is not. A naive
+"mirror local `references/` + `scripts/` into the clone and push" publishes the
+server layout. Measured before the v3.1 sync: 27 `/home/<user>/...` strings
+across 14 files — six of them `~/.hermes/.env` — against **zero** in the
+published HEAD. The skill's own gate caught it, which is the whole point of
+running the gate BEFORE `git add`.
+
+Order matters:
+
+1. **Preserve set** — repo-only files that must survive the mirror: `LICENSE`,
+   `README.md`, `walkthrough.md`, `assets/templates/` (6 files), `.gitignore`.
+   Delete + copy only `references/` and `scripts/`.
+2. **SKILL.md** — take the BODY from the local copy, keep the PUBLISHED
+   frontmatter (`description: "Trigger: …"` + `metadata.author`), and bump
+   `metadata.version`. The local frontmatter still carries the older `trigger:`
+   block; publishing it would regress the repo.
+3. **Sanitise the CLONE only**, absolute paths become `~`:
+   `grep -rl "/home/$USER" --include='*.md' --include='*.py' --include='*.lua' . | xargs sed -i "s#/home/$USER#~#g"`
+4. **Gate**: `python3 scripts/check-no-private-data.py .` → the `/home/…` class
+   must report zero. Everything else that remains is the token-identifier class
+   (`GITHUB_TOKEN`, `GITHUB_PERSONAL_ACCESS_TOKEN` in prose and inside the
+   scanner's own pattern list) — 9 hits at v3.1, all false positives. Accept
+   them, then prove it in step 5.
+5. **Prove no real credential slipped through** — this is the check that
+   matters, not the string scan:
+   `grep -rEn 'gh[pousr]_[A-Za-z0-9]{15,}|github_pat_[A-Za-z0-9_]{15,}' .` → empty.
+6. **Refresh the counts the README asserts** (`N reference files`, `N scripts`) —
+   they go stale silently and the README is the front door of the repo.
+7. **Read the remote back** after the push: commit sha, `contents/references`
+   length, `contents/scripts` length, `SKILL.md` size + version line.
+
+Keep the leak detector a SHAPE, never a name: write `/home/[a-z0-9_]+/` in
+`sensitive_pats`, not one literal user path — a literal either leaks the account
+into the public file or gets sanitised into a broken pattern (the same trap this
+section exists to prevent).
 
 ## GitHub token validation BEFORE push (avoid wasted push attempts)
 
